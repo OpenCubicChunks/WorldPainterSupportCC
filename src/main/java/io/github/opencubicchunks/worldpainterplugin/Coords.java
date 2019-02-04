@@ -21,7 +21,7 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  *  THE SOFTWARE.
  */
-package io.github.opencubicchunks.worldpainterplugin.util;
+package io.github.opencubicchunks.worldpainterplugin;
 
 import java.util.Random;
 
@@ -49,7 +49,7 @@ public class Coords {
     public static int blockCeilToCube(int val) {
         return -((-val) >> 4);
     }
-    
+
     public static int blockToBiome(int val) {
         return (val & 14) >> 1;
     }
@@ -67,7 +67,7 @@ public class Coords {
     }
 
     public static int cubeToCenterBlock(int cubeVal) {
-        return localToBlock(cubeVal, 16/ 2);
+        return localToBlock(cubeVal, 16 / 2);
     }
 
     /**
@@ -84,9 +84,9 @@ public class Coords {
      * Return a seed for random number generation, based on initial seed and 3 coordinates.
      *
      * @param seed the world seed
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param z the z coordinate
+     * @param x    the x coordinate
+     * @param y    the y coordinate
+     * @param z    the z coordinate
      * @return A seed value based on world seed, x, y and z coordinates
      */
     public static long coordsSeedHash(long seed, int x, int y, int z) {

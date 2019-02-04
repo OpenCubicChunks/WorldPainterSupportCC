@@ -89,7 +89,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
                     int borderLevel = dim0.getBorderLevel();
                     int oceanDepth = Math.min(borderLevel / 2, 20);
                     int dirtDepth = borderLevel - oceanDepth - (bottomless ? 1 : 0);
-                    if (! bottomless) {
+                    if (!bottomless) {
                         generatorOptions.append("1*minecraft:bedrock,");
                     }
                     generatorOptions.append(dirtDepth);
@@ -114,7 +114,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
             }
         }
         if (world.getPlatform().equals(DefaultPlugin.JAVA_ANVIL)) {
-            if ((! endlessBorder) && (world.getGenerator() == Generator.FLAT) && (world.getGeneratorOptions() != null)) {
+            if ((!endlessBorder) && (world.getGenerator() == Generator.FLAT) && (world.getGeneratorOptions() != null)) {
                 level.setGeneratorOptions(world.getGeneratorOptions());
             }
             World2.BorderSettings borderSettings = world.getBorderSettings();
@@ -136,7 +136,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
         if (selectedTiles == null) {
             selectedDimension = -1;
             boolean first = true;
-            for (Dimension dimension: world.getDimensions()) {
+            for (Dimension dimension : world.getDimensions()) {
                 if (dimension.getDim() < 0) {
                     // This dimension will be exported as part of another
                     // dimension, so skip it
@@ -228,8 +228,8 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
                 throw new IllegalArgumentException("Dimension " + dimension.getDim() + " not supported");
         }
         File regionDir = new File(dimensionDir, "region");
-        if (! regionDir.exists()) {
-            if (! regionDir.mkdirs()) {
+        if (!regionDir.exists()) {
+            if (!regionDir.mkdirs()) {
                 throw new RuntimeException("Could not create directory " + regionDir);
             }
         }
@@ -239,15 +239,15 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
         // Calculate total size of dimension
         Set<Point> regions = new HashSet<>(), exportedRegions = new HashSet<>();
         if (selectedTiles != null) {
-            for (Point tile: selectedTiles) {
+            for (Point tile : selectedTiles) {
                 regions.add(new Point(tile.x >> 2, tile.y >> 2));
             }
         } else {
-            for (Tile tile: dimension.getTiles()) {
+            for (Tile tile : dimension.getTiles()) {
                 // Also add regions for any bedrock wall and/or border
                 // tiles, if present
-                int r = (((dimension.getBorder() != null) && (! dimension.getBorder().isEndless())) ? dimension.getBorderSize() : 0)
-                        + (((dimension.getBorder() == null) || (! dimension.getBorder().isEndless())) && dimension.isBedrockWall() ? 1 : 0);
+                int r = (((dimension.getBorder() != null) && (!dimension.getBorder().isEndless())) ? dimension.getBorderSize() : 0)
+                        + (((dimension.getBorder() == null) || (!dimension.getBorder().isEndless())) && dimension.isBedrockWall() ? 1 : 0);
                 for (int dx = -r; dx <= r; dx++) {
                     for (int dy = -r; dy <= r; dy++) {
                         regions.add(new Point((tile.getX() + dx) >> 2, (tile.getY() + dy) >> 2));
@@ -255,12 +255,12 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
                 }
             }
             if (ceiling != null) {
-                for (Tile tile: ceiling.getTiles()) {
+                for (Tile tile : ceiling.getTiles()) {
                     regions.add(new Point(tile.getX() >> 2, tile.getY() >> 2));
                 }
             }
         }
-        for (Point region: regions) {
+        for (Point region : regions) {
             File file = new File(dimensionDir, "region/r." + region.x + "." + region.y + (platform.equals(DefaultPlugin.JAVA_ANVIL) ? ".mca" : ".mcr"));
             collectedStats.size += file.length();
         }

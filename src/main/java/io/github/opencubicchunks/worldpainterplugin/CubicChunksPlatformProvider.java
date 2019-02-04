@@ -1,6 +1,5 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
-import io.github.opencubicchunks.worldpainterplugin.io.CubicChunkStore;
 import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.ChunkStore;
 import org.pepsoft.worldpainter.Platform;
@@ -43,7 +42,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
 
     @Override
     public Chunk createChunk(Platform platform, int x, int z, int maxHeight) {
-        if (! platform.equals(CUBICCHUNKS)) {
+        if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
         return new Chunk16Virtual(x, z, maxHeight);
@@ -51,11 +50,11 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
 
     @Override
     public ChunkStore getChunkStore(Platform platform, File worldDir, int dimension) {
-        if (! platform.equals(CUBICCHUNKS)) {
+        if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
         try {
-            return new CubicChunkStore(worldDir, dimension);
+            return new CubicChunkStore(worldDir, dimension, Integer.MAX_VALUE / 2);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -64,7 +63,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     @Override
     public WorldExporter getExporter(World2 world) {
         Platform platform = world.getPlatform();
-        if (! platform.equals(CUBICCHUNKS)) {
+        if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
         return new CubicChunksWorldExporter(world);
@@ -78,7 +77,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
 
     @Override
     public PostProcessor getPostProcessor(Platform platform) {
-        if (! platform.equals(CUBICCHUNKS)) {
+        if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
         return new JavaPostProcessor();
@@ -90,13 +89,13 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     }
 
     private void init() {
-        
+
     }
 
     static final Platform CUBICCHUNKS = new Platform(
             "org.pepsoft.cubicchunks",
             "CubicChunks",
-            256, 256, Integer.MAX_VALUE/2,
+            256, 256, Integer.MAX_VALUE / 2,
             Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE,
             Arrays.asList(SURVIVAL, CREATIVE),
             singletonList(DEFAULT),

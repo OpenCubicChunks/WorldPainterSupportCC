@@ -1,15 +1,18 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
-import io.github.opencubicchunks.worldpainterplugin.util.Coords;
-import org.jnbt.CompoundTag;
-import org.jnbt.Tag;
+import org.jnbt.*;
 import org.pepsoft.minecraft.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.*;
+import java.io.*;
 import java.util.*;
 import java.util.List;
 import java.util.function.ToIntFunction;
+import java.util.stream.Collectors;
 
+import static java.util.stream.Collectors.toCollection;
 import static org.pepsoft.minecraft.Constants.*;
 
 /**
@@ -23,12 +26,16 @@ import static org.pepsoft.minecraft.Constants.*;
  *
  * <p>Created by Pepijn on 12-2-2017.
  */
-public class Chunk16Virtual implements Chunk {
+public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
-    private final int columnX;
-    private final int columnZ;
-    private final Map<Integer, Section> sections;
-    private final int[] heightMap = new int[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
+    private static final Logger LOGGER = LoggerFactory.getLogger(Chunk16Virtual.class);
+
+    private int columnX;
+    private int columnZ;
+    private final Map<Integer, Cube16> cubes;
+
+    private int[] yMax = new int[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
+
     private byte[] biomes = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
 
     private final List<Entity> entities = new ArrayList<>();
@@ -41,29 +48,118 @@ public class Chunk16Virtual implements Chunk {
     private long inhabitedTime;
 
     public Chunk16Virtual(int columnX, int columnZ, int maxHeight) {
-        this(columnX, columnZ, new HashMap<>(), maxHeight);
-    }
-
-    public Chunk16Virtual(int columnX, int columnZ, Map<Integer, Section> sections, int maxHeight) {
+        super(new CompoundTag(TAG_LEVEL, new HashMap<>()));
         this.columnX = columnX;
         this.columnZ = columnZ;
-        this.sections = sections;
+        this.cubes = new HashMap<>();
         this.maxHeight = maxHeight;
         this.readOnly = false;
     }
 
-    public Section getOrMakeSection(int blockY) {
+    public Chunk16Virtual(SerializedColumn serialized, int columnX, int columnZ, int maxHeight) {
+        super((CompoundTag) serialized.columnTag.getTag("Level"));
+        this.columnX = columnX;
+        this.columnZ = columnZ;
+        this.cubes = new HashMap<>();
+        this.maxHeight = maxHeight;
+        this.readOnly = false;
+
+        loadColumnData();
+        serialized.cubeTags.forEach((cubeY, tag) -> cubes.put(cubeY, new Cube16(this, tag)));
+    }
+
+    //======================================
+    //              NBT IO
+    //======================================
+
+    private void loadColumnData() {
+        int version = getByte("v") & 0xFF;
+        if (version != 1) {
+            throw new IllegalArgumentException(String.format("Column has wrong version: %d", version));
+        }
+
+        int xCheck = getInt("x");
+        int zCheck = getInt("z");
+        if (xCheck != getxPos() || zCheck != getzPos()) {
+            LOGGER.error("Column or region file is corrupted! Expected ({},{}) but got ({},{}). Column will be relocated to ({}, {})",
+                    getxPos(), getzPos(), xCheck, zCheck, xCheck, zCheck);
+        }
+
+        this.inhabitedTime = getInt("InhabitedTime");
+
+        System.arraycopy(getByteArray("Biomes"), 0, biomes, 0, Coords.CUBE_SIZE * Coords.CUBE_SIZE);
+
+        ByteArrayInputStream buf = new ByteArrayInputStream(getByteArray("OpacityIndex"));
+        try (DataInputStream in = new DataInputStream(buf)) {
+            for (int i = 0; i < yMax.length; i++) {
+                in.skipBytes(Integer.BYTES);// skip yMin
+                this.yMax[i] = in.readInt() + 1;
+                // skip the opacity index, we don't need it, and we are going to set the isSurfaceTracked
+                // bit in cubes to false to rebuild it
+                int segmentCount = in.readUnsignedShort();
+                in.skipBytes(segmentCount * Integer.BYTES);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error reading OpacityIndex, data will be removed", e);
+        }
+    }
+
+    public SerializedColumn serialize() {
+        return new SerializedColumn(
+                (CompoundTag) toNBT(),
+                cubes.entrySet().stream()
+                        .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), (CompoundTag) entry.getValue().toNBT()))
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+        );
+    }
+
+    @Override
+    public Tag toNBT() {
+        setInt("x", getxPos());
+        setInt("z", getzPos());
+        setInt("v", 1);
+
+        setLong("InhabitedTime", getInhabitedTime());
+
+        if (biomes != null) {
+            setByteArray("Biomes", biomes);
+        }
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(8192);
+        try (DataOutputStream out = new DataOutputStream(baos)) {
+            for (int height : yMax) {
+                // yMin 0, we can be almost sure about that. TODO: find a way to generate the right value here
+                out.writeInt(0);
+                out.writeInt(height);
+                // segment count 0, let them be regenerated
+                out.writeShort(0);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error writing column", e);
+        }
+        setByteArray("OpacityIndex", baos.toByteArray());
+
+        CompoundTag columnNbt = new CompoundTag("", new HashMap<>());
+        columnNbt.setTag("Level", super.toNBT());
+        return columnNbt;
+    }
+
+    //======================================
+    //             Chunk Impl
+    //======================================
+
+    private Cube16 getOrMakeSection(int blockY) {
         int cubeY = Coords.blockToCube(blockY);
-        Section section = sections.get(cubeY);
+        Cube16 section = cubes.get(cubeY);
         if (section == null) {
-            sections.put(cubeY, section = new Section(cubeY));
+            cubes.put(cubeY, section = new Cube16(this, cubeY));
         }
         return section;
     }
 
-    private int ifSectionExists(int blockY, int def, ToIntFunction<Section> cons) {
+    private int ifSectionExists(int blockY, int def, ToIntFunction<Cube16> cons) {
         int cubeY = Coords.blockToCube(blockY);
-        Section section = sections.get(cubeY);
+        Cube16 section = cubes.get(cubeY);
         if (section == null) {
             return def;
         }
@@ -102,12 +198,12 @@ public class Chunk16Virtual implements Chunk {
 
     @Override
     public int getHeight(int blockX, int blockZ) {
-        return heightMap[Coords.index(blockX, blockZ)];
+        return yMax[Coords.index(blockX, blockZ)];
     }
 
     @Override
     public void setHeight(int blockX, int blockZ, int height) {
-        heightMap[Coords.index(blockX, blockZ)] = height;
+        yMax[Coords.index(blockX, blockZ)] = height;
     }
 
     @Override
@@ -228,109 +324,93 @@ public class Chunk16Virtual implements Chunk {
         return 0;
     }
 
-    // serialization
-    public void setBiomeArray(byte[] biomeArray) {
-        this.biomes = biomeArray;
-    }
+    public static class Cube16 extends AbstractNBTItem {
 
-    public byte[] getBiomeArray() {
-        return biomes;
-    }
-
-    public Map<Integer, Section> getSections() {
-        return sections;
-    }
-
-    public byte isForcePopulated() {
-        return (byte) (forcePopulated ? 1 : 0);
-    }
-
-    public static class Section extends AbstractNBTItem {
-
+        private Chunk16Virtual parent;
         private final int level;
+        private final List<Entity> entities;
+        private final List<TileEntity> tileEntities;
         private byte[] blocks;
         private byte[] data;
         private byte[] skyLight;
         private byte[] blockLight;
         private byte[] add;
 
+        // a hack because of this NBT library works
+        // it doesn't agree with nesting that doesn't directly correspond to in-memory nesting
+        private AbstractNBTItem sectionNbtPlaceholder;
+
         private static final long serialVersionUID = 1L;
 
-        Section(CompoundTag tag) {
-            super(tag);
-            level = getInt(TAG_Y2);
-            blocks = getByteArray(TAG_BLOCKS);
-            if (containsTag(TAG_ADD)) {
-                add = getByteArray(TAG_ADD);
+        Cube16(Chunk16Virtual parent, CompoundTag tag) {
+            super((CompoundTag) tag.getTag("Level"));
+            this.parent = parent;
+
+            int version = getByte("v") & 0xFF;
+            if (version != 1) {
+                throw new IllegalArgumentException("Cube has wrong version! " + version);
             }
-            data = getByteArray(TAG_DATA);
-            skyLight = getByteArray(TAG_SKY_LIGHT);
-            blockLight = getByteArray(TAG_BLOCK_LIGHT);
+            level = getInt("y");
+            sectionNbtPlaceholder = new PlaceholderNBT(true);
+
+            List<CompoundTag> entityTags = getList("Entities");
+            entities = entityTags.stream().map(Entity::fromNBT).collect(toCollection(ArrayList::new));
+
+            List<CompoundTag> tileEntityTags = getList("TileEntities");
+            tileEntities = tileEntityTags.stream().map(TileEntity::fromNBT).collect(toCollection(ArrayList::new));
         }
 
-        Section(int level) {
-            super(new CompoundTag("", new HashMap<>()));
-            this.level = Coords.cubeToMinBlock(level);
-            blocks = new byte[256 * 16];
-            data = new byte[128 * 16];
-            skyLight = new byte[128 * 16];
+        private CompoundTag getSectionTag() {
+            List<Tag> sectionsTag = getList("Sections");
+            if (sectionsTag == null) {
+                return new CompoundTag("", new HashMap<>());
+            }
+            return (CompoundTag) sectionsTag.get(0);
+        }
+
+        Cube16(Chunk16Virtual parent, int cubeY) {
+            super(new CompoundTag("Level", new HashMap<>()));
+            this.parent = parent;
+            level = cubeY;
+            blocks = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE];
+            data = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE / 2];
+            skyLight = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE / 2];
             Arrays.fill(skyLight, (byte) 0xff);
-            blockLight = new byte[128 * 16];
+            blockLight = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE / 2];
+            entities = new ArrayList<>();
+            tileEntities = new ArrayList<>();
+            sectionNbtPlaceholder = new PlaceholderNBT(false);
         }
 
         @Override
         public Tag toNBT() {
-            setInt(TAG_Y2, level);
-            setByteArray(TAG_BLOCKS, blocks);
-            if (add != null) {
-                for (byte b : add) {
-                    if (b != 0) {
-                        setByteArray(TAG_ADD, add);
-                        break;
-                    }
-                }
-            }
-            setByteArray(TAG_DATA, data);
-            setByteArray(TAG_SKY_LIGHT, skyLight);
-            setByteArray(TAG_BLOCK_LIGHT, blockLight);
-            return super.toNBT();
-        }
+            setByte("v", (byte) 1);
 
-        /**
-         * Indicates whether the section is empty, meaning all block ID's, data
-         * values and block light values are 0, and all sky light values are 15.
-         *
-         * @return <code>true</code> if the section is empty
-         */
-        boolean isEmpty() {
-            for (byte b : blocks) {
-                if (b != (byte) 0) {
-                    return false;
-                }
-            }
-            if (add != null) {
-                for (byte b : add) {
-                    if (b != (byte) 0) {
-                        return false;
-                    }
-                }
-            }
-            for (byte b : skyLight) {
-                if (b != (byte) -1) {
-                    return false;
-                }
-            }
-            for (byte b : blockLight) {
-                if (b != (byte) 0) {
-                    return false;
-                }
-            }
-            for (byte b : data) {
-                if (b != (byte) 0) {
-                    return false;
-                }
-            }
-            return true;
+            // coords
+            setInt("x", parent.getxPos());
+            setInt("y", getY());
+            setInt("z", parent.getzPos());
+
+            // save the worldgen stage and the target stage
+            setBoolean("populated", parent.forcePopulated);
+            setBoolean("isSurfaceTracked", false);
+            // we can't know that one, but in the worst case, setting it incorrectly will cause cube to be sent to client before it's fully populated
+            setBoolean("fullyPopulated", true);
+
+            setBoolean("initLightDone", parent.forceLightPopulated);
+
+            setList("Sections", CompoundTag.class, Arrays.asList(sectionNbtPlaceholder.toNBT()));
+
+            setList("Entities", CompoundTag.class, entities.stream().map(Entity::toNBT).collect(Collectors.toList()));
+            setList("TileEntities", CompoundTag.class, tileEntities.stream().map(TileEntity::toNBT).collect(Collectors.toList()));
+
+            setMap("LightingInfo", new HashMap<String, Tag>() {{
+                put("LastHeightMap", new IntArrayTag("LastHeightMap", parent.yMax));
+                put("EdgeNeedSkyLightUpdate", new ByteTag("EdgeNeedSkyLightUpdate", (byte) 0));
+            }});
+            CompoundTag cubeNbt = new CompoundTag("", new HashMap<>());
+            cubeNbt.setTag("Level", super.toNBT());
+            return cubeNbt;
         }
 
         int getBlockLight(int x, int y, int z) {
@@ -401,42 +481,54 @@ public class Chunk16Virtual implements Chunk {
                     (byte) ((dataByte & 0x0F) | ((val & 0x0F) << 4));
         }
 
-        public void setDataFromNBT(byte[] blocks, byte[] data, byte[] add) {
-            this.blocks = blocks;
-            this.data = data;
-            this.add = add;
-        }
-
-        public void setBlockLightArray(byte[] array) {
-            this.blockLight = array;
-        }
-
-        public void setSkyLightArray(byte[] array) {
-            this.skyLight = array;
-        }
-
         public int getY() {
             return level;
         }
 
-        public byte[] getIds() {
-            return blocks;
-        }
+        private class PlaceholderNBT extends AbstractNBTItem {
+            public PlaceholderNBT(boolean load) {
+                super(Cube16.this.getSectionTag());
+                if (!load) {
+                    return;
+                }
+                blocks = getByteArray("Blocks");
+                data = getByteArray("Data");
+                if (containsTag("Add")) {
+                    add = getByteArray("Add");
+                }
 
-        public byte[] getMetas() {
-            return data;
-        }
+                skyLight = getByteArray("SkyLight");
+                blockLight = getByteArray("BlockLight");
+            }
 
-        public byte[] getExtIds() {
-            return add;
-        }
+            @Override
+            public Tag toNBT() {
+                setByteArray("Blocks", blocks);
+                setByteArray("Data", data);
 
-        public byte[] getSkylight() {
-            return skyLight;
-        }
+                if (add != null) {
+                    for (byte b : add) {
+                        if (b != 0) {
+                            setByteArray("Add", add);
+                            break;
+                        }
+                    }
+                }
 
-        public byte[] getBlocklight() {
-            return blockLight;
+                setByteArray("SkyLight", skyLight);
+                setByteArray("BlockLight", blockLight);
+                return super.toNBT();
+            }
+        }
+    }
+
+    public static class SerializedColumn {
+        public final CompoundTag columnTag;
+        public final Map<Integer, CompoundTag> cubeTags;
+
+        public SerializedColumn(CompoundTag columnTag, Map<Integer, CompoundTag> sectionTags) {
+            this.columnTag = columnTag;
+            this.cubeTags = sectionTags;
         }
     }
 }
