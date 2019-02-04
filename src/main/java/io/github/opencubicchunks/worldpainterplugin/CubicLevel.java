@@ -1,22 +1,26 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
-import org.jnbt.*;
+import org.jnbt.CompoundTag;
+import org.jnbt.NBTInputStream;
+import org.jnbt.NBTOutputStream;
+import org.jnbt.Tag;
 import org.pepsoft.minecraft.AbstractNBTItem;
 import org.pepsoft.minecraft.Dimension;
 import org.pepsoft.worldpainter.AccessDeniedException;
-import org.pepsoft.worldpainter.DefaultPlugin;
 import org.pepsoft.worldpainter.Generator;
 import org.pepsoft.worldpainter.Platform;
 
 import java.io.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static org.pepsoft.minecraft.Constants.*;
 
 // a copy of Level modified to support cubic chunks worlds
-// TODO: modify more of it and verify that it works as intended
 public class CubicLevel extends AbstractNBTItem {
 
     public CubicLevel(int mapHeight, Platform platform) {
@@ -30,7 +34,7 @@ public class CubicLevel extends AbstractNBTItem {
         setBoolean("isCubicWorld", true);
         this.maxHeight = mapHeight;
         extraTags = null;
-        setInt(TAG_VERSION, platform.equals(DefaultPlugin.JAVA_MCREGION) ? SUPPORTED_VERSION_1 : SUPPORTED_VERSION_2);
+        setInt(TAG_VERSION, SUPPORTED_VERSION_2);
         addDimension(0);
     }
 
@@ -40,11 +44,8 @@ public class CubicLevel extends AbstractNBTItem {
             throw new IllegalArgumentException("mapHeight " + mapHeight + " not a power of two");
         }
         int version = getInt(TAG_VERSION);
-        if ((version != SUPPORTED_VERSION_1) && (version != SUPPORTED_VERSION_2)) {
+        if (version != SUPPORTED_VERSION_2) {
             throw new IllegalArgumentException("Not a supported version: 0x" + Integer.toHexString(version));
-        }
-        if (mapHeight != ((version == SUPPORTED_VERSION_1) ? DEFAULT_MAX_HEIGHT_1 : DEFAULT_MAX_HEIGHT_2)) {
-            setInt(TAG_MAP_HEIGHT, mapHeight);
         }
         this.maxHeight = mapHeight;
         if (tag.getValue().size() == 1) {
@@ -79,34 +80,6 @@ public class CubicLevel extends AbstractNBTItem {
         setLong(TAG_LAST_PLAYED, System.currentTimeMillis());
         try (NBTOutputStream out = new NBTOutputStream(new GZIPOutputStream(new FileOutputStream(levelDatFile)))) {
             out.writeTag(toNBT());
-        }
-
-        // If height is non-standard, write DynamicHeight mod and Height Mod
-        // files
-        int mapHeight = getMapHeight();
-        if (mapHeight != 0) {
-            int exp = (int) (Math.log(mapHeight) / Math.log(2));
-            PrintWriter writer = new PrintWriter(new File(worldDir, "maxheight.txt"), "US-ASCII");
-            try {
-                writer.println("#DynamicHeight Save Format 2");
-                writer.println("#" + new Date());
-                writer.println("height=" + exp);
-            } finally {
-                writer.close();
-            }
-
-            writer = new PrintWriter(new File(worldDir, "Height.txt"), "US-ASCII");
-            try {
-                writer.println("#HeightMod 1.5");
-                writer.println("#" + new Date());
-                writer.println("height=" + exp);
-                writer.println("version=1");
-                writer.println("midheight=" + mapHeight + ".0");
-                writer.println("waterlevel=" + (mapHeight / 2 - 2) + ".0");
-                writer.println("genheight=" + mapHeight + ".0");
-            } finally {
-                writer.close();
-            }
         }
     }
 
@@ -297,27 +270,15 @@ public class CubicLevel extends AbstractNBTItem {
     public void setGenerator(Generator generator) {
         switch (generator) {
             case DEFAULT:
-                if (getVersion() == SUPPORTED_VERSION_1) {
-                    setString(TAG_GENERATOR_NAME, "DEFAULT");
-                } else {
-                    setString(TAG_GENERATOR_NAME, "default");
-                    setInt(TAG_GENERATOR_VERSION, 1);
-                }
+                setString(TAG_GENERATOR_NAME, "default");
+                setInt(TAG_GENERATOR_VERSION, 1);
                 break;
             case FLAT:
-                if (getVersion() == SUPPORTED_VERSION_1) {
-                    setString(TAG_GENERATOR_NAME, "FLAT");
-                } else {
-                    setString(TAG_GENERATOR_NAME, "flat");
-                }
+                setString(TAG_GENERATOR_NAME, "flat");
                 break;
             case LARGE_BIOMES:
-                if (getVersion() == SUPPORTED_VERSION_1) {
-                    throw new IllegalArgumentException("Large biomes not supported for Minecraft 1.1 maps");
-                } else {
-                    setString(TAG_GENERATOR_NAME, "largeBiomes");
-                    setInt(TAG_GENERATOR_VERSION, 0);
-                }
+                setString(TAG_GENERATOR_NAME, "largeBiomes");
+                setInt(TAG_GENERATOR_VERSION, 0);
                 break;
             default:
                 throw new IllegalArgumentException("Use setGeneratorName(String) for generator " + generator);
@@ -388,38 +349,12 @@ public class CubicLevel extends AbstractNBTItem {
         return new CompoundTag("", values);
     }
 
-    public static org.pepsoft.minecraft.Level load(File levelDatFile) throws IOException {
+    public static CubicLevel load(File levelDatFile) throws IOException {
         Tag tag;
         try (NBTInputStream in = new NBTInputStream(new GZIPInputStream(new FileInputStream(levelDatFile)))) {
             tag = in.readTag();
         }
-
-        int version = ((IntTag) ((CompoundTag) ((CompoundTag) tag).getTag(TAG_DATA)).getTag(TAG_VERSION)).getValue();
-        int maxHeight = (version == SUPPORTED_VERSION_1) ? DEFAULT_MAX_HEIGHT_1 : DEFAULT_MAX_HEIGHT_2;
-        if (version == SUPPORTED_VERSION_1) {
-            if (((CompoundTag) ((CompoundTag) tag).getTag(TAG_DATA)).getTag(TAG_MAP_HEIGHT) != null) {
-                maxHeight = ((IntTag) ((CompoundTag) ((CompoundTag) tag).getTag(TAG_DATA)).getTag(TAG_MAP_HEIGHT)).getValue();
-            } else {
-                File maxheightFile = new File(levelDatFile.getParentFile(), "maxheight.txt");
-                if (!maxheightFile.isFile()) {
-                    maxheightFile = new File(levelDatFile.getParentFile(), "Height.txt");
-                }
-                if (maxheightFile.isFile()) {
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(maxheightFile), "US-ASCII"))) {
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            if (line.startsWith("height=")) {
-                                int exp = Integer.parseInt(line.substring(7));
-                                maxHeight = 1 << exp;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return new org.pepsoft.minecraft.Level((CompoundTag) tag, maxHeight);
+        return new CubicLevel((CompoundTag) tag, Integer.MAX_VALUE / 2);
     }
 
     private final int maxHeight;
