@@ -1,5 +1,8 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
+import com.carrotsearch.hppc.IntObjectHashMap;
+import com.carrotsearch.hppc.IntObjectMap;
+import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import org.jnbt.*;
 import org.pepsoft.minecraft.*;
 import org.slf4j.Logger;
@@ -32,7 +35,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     private int columnX;
     private int columnZ;
-    private final Map<Integer, Cube16> cubes;
+    private final IntObjectMap<Cube16> cubes;
 
     private int[] yMax = new int[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
 
@@ -51,7 +54,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         super(new CompoundTag(TAG_LEVEL, new HashMap<>()));
         this.columnX = columnX;
         this.columnZ = columnZ;
-        this.cubes = new HashMap<>();
+        this.cubes = new IntObjectHashMap<>(64);
         this.maxHeight = maxHeight;
         this.readOnly = false;
     }
@@ -60,7 +63,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         super((CompoundTag) serialized.columnTag.getTag("Level"));
         this.columnX = columnX;
         this.columnZ = columnZ;
-        this.cubes = new HashMap<>();
+        this.cubes = new IntObjectHashMap<>(64);
         this.maxHeight = maxHeight;
         this.readOnly = false;
 
@@ -105,12 +108,11 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     public SerializedColumn serialize() {
-        return new SerializedColumn(
-                (CompoundTag) toNBT(),
-                cubes.entrySet().stream()
-                        .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), (CompoundTag) entry.getValue().toNBT()))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-        );
+        Map<Integer, CompoundTag> tags = new HashMap<>(cubes.size() * 2);
+        for (IntObjectCursor<Cube16> cursor : cubes) {
+            tags.put(cursor.key, (CompoundTag) cursor.value.toNBT());
+        }
+        return new SerializedColumn((CompoundTag) toNBT(), tags);
     }
 
     @Override
@@ -251,9 +253,10 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     public void setMaterial(int blockX, int blockY, int blockZ, Material material) {
         int id = material.blockType & 0xFF;
         int extId = material.blockType >> 8;
-        setBlockType(blockX, blockY, blockZ, id);
-        getOrMakeSection(blockY).setExtId(blockX, blockY, blockZ, extId);
-        setDataValue(blockX, blockY, blockZ, material.data);
+        Cube16 cube = getOrMakeSection(blockY);
+        cube.setId(blockX, blockY, blockZ, id);
+        cube.setExtId(blockX, blockY, blockZ, extId);
+        cube.setMeta(blockX, blockY, blockZ, material.data);
     }
 
     @Override
@@ -326,8 +329,20 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     public static class Cube16 extends AbstractNBTItem {
 
+        private static final int BLOCK_COUNT = Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE;
+        // placeholder for writing to disk when original is empty, nibble version
+        private static final byte[] PLACEHOLDER_WRITE = new byte[BLOCK_COUNT >> 1];
+        // placeholder for writing to disk when original is empty, full byte version, filled with skylight 15
+        private static final byte[] PLACEHOLDER_WRITE_SKYLIGHT = new byte[BLOCK_COUNT >> 1];
+        // placeholder for writing to disk when original is empty, full byte version
+        private static final byte[] PLACEHOLDER_WRITE_FULL = new byte[BLOCK_COUNT];
+
+        static {
+            Arrays.fill(PLACEHOLDER_WRITE_SKYLIGHT, (byte) 0xFF);
+        }
+
         private Chunk16Virtual parent;
-        private final int level;
+        private final int yPos;
         private final List<Entity> entities;
         private final List<TileEntity> tileEntities;
         private byte[] blocks;
@@ -350,7 +365,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             if (version != 1) {
                 throw new IllegalArgumentException("Cube has wrong version! " + version);
             }
-            level = getInt("y");
+            yPos = getInt("y");
             sectionNbtPlaceholder = new PlaceholderNBT(true);
 
             List<CompoundTag> entityTags = getList("Entities");
@@ -371,12 +386,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         Cube16(Chunk16Virtual parent, int cubeY) {
             super(new CompoundTag("Level", new HashMap<>()));
             this.parent = parent;
-            level = cubeY;
-            blocks = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE];
-            data = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE / 2];
-            skyLight = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE / 2];
-            Arrays.fill(skyLight, (byte) 0xff);
-            blockLight = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE * Coords.CUBE_SIZE / 2];
+            yPos = cubeY;
             entities = new ArrayList<>();
             tileEntities = new ArrayList<>();
             sectionNbtPlaceholder = new PlaceholderNBT(false);
@@ -414,55 +424,58 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         }
 
         int getBlockLight(int x, int y, int z) {
-            return getDataByte(blockLight, x, y, z);
+            return getDataByte(blockLight, x, y, z, 0);
         }
 
         int getSkyLight(int x, int y, int z) {
-            return getDataByte(skyLight, x, y, z);
+            return getDataByte(skyLight, x, y, z, 15);
         }
 
         int getMeta(int x, int y, int z) {
-            return getDataByte(data, x, y, z);
+            return getDataByte(data, x, y, z, 0);
         }
 
         int getExtId(int x, int y, int z) {
-            if (add == null) {
-                return 0;
-            }
-            return getDataByte(add, x, y, z);
+            return getDataByte(add, x, y, z, 0);
         }
 
         int getId(int x, int y, int z) {
+            if (blocks == null) {
+                return 0;
+            }
             return blocks[Coords.index(x, y, z)] & 0xFF;
         }
 
         void setBlockLight(int x, int y, int z, int val) {
-            setDataByte(blockLight, x, y, z, val);
+            blockLight = setDataByte(blockLight, x, y, z, val, 0);
         }
 
         void setSkyLight(int x, int y, int z, int val) {
-            setDataByte(skyLight, x, y, z, val);
+            skyLight = setDataByte(skyLight, x, y, z, val, 15);
         }
 
         void setMeta(int x, int y, int z, int val) {
-            setDataByte(data, x, y, z, val);
+            data = setDataByte(data, x, y, z, val, 0);
         }
 
         void setExtId(int x, int y, int z, int val) {
-            if (add == null) {
-                if (val == 0) {
-                    return;
-                }
-                add = new byte[2048];
-            }
-            setDataByte(add, x, y, z, val);
+            add = setDataByte(add, x, y, z, val, 0);
         }
 
         void setId(int x, int y, int z, int val) {
+            if (blocks == null) {
+                if (val == 0) {
+                    return;
+                }
+                blocks = new byte[BLOCK_COUNT];
+            }
             blocks[Coords.index(x, y, z)] = (byte) val;
         }
 
-        private int getDataByte(byte[] array, int x, int y, int z) {
+        private int getDataByte(byte[] array, int x, int y, int z, int def) {
+            if (array == null) {
+                return def;
+            }
             int blockOffset = Coords.index(x, y, z);
             byte dataByte = array[blockOffset >> 1];
             // Even byte -> least significant bits
@@ -470,7 +483,16 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             return (blockOffset & 1) == 0 ? dataByte & 0x0F : (dataByte & 0xF0) >> 4;
         }
 
-        private void setDataByte(byte[] array, int x, int y, int z, int val) {
+        private byte[] setDataByte(byte[] array, int x, int y, int z, int val, int def) {
+            if (array == null) {
+                if (val == def) {
+                    return null;
+                }
+                array = new byte[BLOCK_COUNT >> 1];
+                if (def != 0) {
+                    Arrays.fill(array, (byte) ((def & 0xF) | ((def & 0xF) << 4)));
+                }
+            }
             int blockOffset = Coords.index(x, y, z);
             int offset = blockOffset >> 1;
             byte dataByte = array[offset];
@@ -479,10 +501,11 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             array[offset] = (blockOffset & 1) == 0 ?
                     (byte) ((dataByte & 0xF0) | (val & 0x0F)) :
                     (byte) ((dataByte & 0x0F) | ((val & 0x0F) << 4));
+            return array;
         }
 
         public int getY() {
-            return level;
+            return yPos;
         }
 
         private class PlaceholderNBT extends AbstractNBTItem {
@@ -503,8 +526,8 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
             @Override
             public Tag toNBT() {
-                setByteArray("Blocks", blocks);
-                setByteArray("Data", data);
+                setByteArray("Blocks", blocks == null ? PLACEHOLDER_WRITE_FULL : blocks);
+                setByteArray("Data", data == null ? PLACEHOLDER_WRITE : data);
 
                 if (add != null) {
                     for (byte b : add) {
@@ -515,8 +538,8 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                     }
                 }
 
-                setByteArray("SkyLight", skyLight);
-                setByteArray("BlockLight", blockLight);
+                setByteArray("SkyLight", skyLight == null ? PLACEHOLDER_WRITE_SKYLIGHT : skyLight);
+                setByteArray("BlockLight", blockLight == null ? PLACEHOLDER_WRITE : blockLight);
                 return super.toNBT();
             }
         }
