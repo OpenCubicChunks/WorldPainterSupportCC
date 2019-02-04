@@ -2,7 +2,9 @@ package io.github.opencubicchunks.worldpainterplugin;
 
 import com.carrotsearch.hppc.IntObjectHashMap;
 import com.carrotsearch.hppc.IntObjectMap;
+import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.jnbt.*;
 import org.pepsoft.minecraft.*;
 import org.slf4j.Logger;
@@ -318,13 +320,41 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     @Override
-    public int getHighestNonAirBlock(int x, int z) {
-        return 0;
+    public int getHighestNonAirBlock(int blockX, int blockZ) {
+        // start with opacity height and try to find anything up
+        int maxCube = Coords.blockToCube(getHeight(blockX, blockZ));
+        // iterate over all cubes and only check ones that are above and aren't empty
+        for (ObjectCursor<Cube16> obj : cubes.values()) {
+            Cube16 cube = obj.value;
+            int cubeY = cube.getY();
+            // this is expected to be the case most of the time
+            if (cubeY <= maxCube || cube.isEmpty()) {
+                continue;
+            }
+            for (int dy = 15; dy >= 0; dy--) {
+                if ((cube.getId(blockX, dy, blockZ) | cube.getExtId(blockX, dy, blockZ)) != 0) {
+                    maxCube = cubeY;
+                    break;
+                }
+            }
+        }
+        return Coords.cubeToMaxBlock(maxCube);
     }
 
     @Override
     public int getHighestNonAirBlock() {
-        return 0;
+        int max = Coords.blockToCube(getHeight(0, 0));
+        for (ObjectCursor<Cube16> obj : cubes.values()) {
+            Cube16 cube = obj.value;
+            if (cube.isEmpty()) {
+                continue;
+            }
+            int newY = cube.getY();
+            if (newY > max) {
+                max = newY;
+            }
+        }
+        return Coords.cubeToMaxBlock(max);
     }
 
     public static class Cube16 extends AbstractNBTItem {
@@ -421,6 +451,11 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             CompoundTag cubeNbt = new CompoundTag("", new HashMap<>());
             cubeNbt.setTag("Level", super.toNBT());
             return cubeNbt;
+        }
+
+        boolean isEmpty() {
+            // data must be empty is blocks and add are null
+            return blocks == null && add == null;
         }
 
         int getBlockLight(int x, int y, int z) {
