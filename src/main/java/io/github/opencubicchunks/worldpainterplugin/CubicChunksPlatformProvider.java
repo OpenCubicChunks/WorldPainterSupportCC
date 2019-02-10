@@ -20,16 +20,17 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
+import static io.github.opencubicchunks.worldpainterplugin.Version.VERSION;
 import static java.util.Collections.singletonList;
 import static org.pepsoft.worldpainter.Constants.DIM_NORMAL;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
 import static org.pepsoft.worldpainter.GameType.SURVIVAL;
 import static org.pepsoft.worldpainter.Generator.DEFAULT;
-import static org.pepsoft.worldpainter.Platform.Capability.BLOCK_BASED;
+import static org.pepsoft.worldpainter.Platform.Capability.*;
 
 public class CubicChunksPlatformProvider extends AbstractPlugin implements BlockBasedPlatformProvider {
     public CubicChunksPlatformProvider() {
-        super("CubicChunksPlatform", "1.0.0platfo");
+        super("CubicChunksPlatform", VERSION);
         init();
     }
 
@@ -100,7 +101,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
             Arrays.asList(SURVIVAL, CREATIVE),
             singletonList(DEFAULT),
             singletonList(DIM_NORMAL),
-            EnumSet.of(BLOCK_BASED));
+            EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED));
 
     private static final Logger logger = LoggerFactory.getLogger(CubicChunksPlatformProvider.class);
 }
