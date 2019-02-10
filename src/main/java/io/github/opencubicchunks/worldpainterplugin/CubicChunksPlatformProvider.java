@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
+import static io.github.opencubicchunks.worldpainterplugin.Version.VERSION;
 import static java.util.Collections.singletonList;
 import static org.pepsoft.worldpainter.Constants.DIM_NORMAL;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
@@ -29,7 +30,7 @@ import static org.pepsoft.worldpainter.Platform.Capability.BLOCK_BASED;
 
 public class CubicChunksPlatformProvider extends AbstractPlugin implements BlockBasedPlatformProvider {
     public CubicChunksPlatformProvider() {
-        super("CubicChunksPlatform", "1.0.0platfo");
+        super("CubicChunksPlatform", VERSION);
         init();
     }
 
