@@ -26,7 +26,7 @@ import static org.pepsoft.worldpainter.Constants.DIM_NORMAL;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
 import static org.pepsoft.worldpainter.GameType.SURVIVAL;
 import static org.pepsoft.worldpainter.Generator.DEFAULT;
-import static org.pepsoft.worldpainter.Platform.Capability.BLOCK_BASED;
+import static org.pepsoft.worldpainter.Platform.Capability.*;
 
 public class CubicChunksPlatformProvider extends AbstractPlugin implements BlockBasedPlatformProvider {
     public CubicChunksPlatformProvider() {
@@ -101,7 +101,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
             Arrays.asList(SURVIVAL, CREATIVE),
             singletonList(DEFAULT),
             singletonList(DIM_NORMAL),
-            EnumSet.of(BLOCK_BASED));
+            EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED));
 
     private static final Logger logger = LoggerFactory.getLogger(CubicChunksPlatformProvider.class);
 }
