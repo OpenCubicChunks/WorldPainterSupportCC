@@ -2,7 +2,6 @@ package io.github.opencubicchunks.worldpainterplugin;
 
 import com.carrotsearch.hppc.IntObjectHashMap;
 import com.carrotsearch.hppc.IntObjectMap;
-import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.jnbt.*;
@@ -544,7 +543,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         }
 
         private class PlaceholderNBT extends AbstractNBTItem {
-            public PlaceholderNBT(boolean load) {
+            PlaceholderNBT(boolean load) {
                 super(Cube16.this.getSectionTag());
                 if (!load) {
                     return;
@@ -580,11 +579,11 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         }
     }
 
-    public static class SerializedColumn {
-        public final CompoundTag columnTag;
-        public final Map<Integer, CompoundTag> cubeTags;
+    static class SerializedColumn {
+        final CompoundTag columnTag;
+        final Map<Integer, CompoundTag> cubeTags;
 
-        public SerializedColumn(CompoundTag columnTag, Map<Integer, CompoundTag> sectionTags) {
+        SerializedColumn(CompoundTag columnTag, Map<Integer, CompoundTag> sectionTags) {
             this.columnTag = columnTag;
             this.cubeTags = sectionTags;
         }

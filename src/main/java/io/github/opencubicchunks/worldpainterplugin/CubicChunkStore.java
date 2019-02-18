@@ -7,10 +7,8 @@ import cubicchunks.regionlib.impl.save.SaveSection3D;
 import org.jnbt.CompoundTag;
 import org.jnbt.NBTInputStream;
 import org.jnbt.NBTOutputStream;
-import org.pepsoft.minecraft.AbstractNBTItem;
 import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.ChunkStore;
-import io.github.opencubicchunks.worldpainterplugin.Chunk16Virtual;
 
 import java.io.*;
 import java.nio.ByteBuffer;
