@@ -9,9 +9,16 @@ import javax.swing.*;
 import java.io.File;
 
 public class CubicChunksMapRecognizer implements MapRecognizer {
+
+    private final CubicChunksPlatformProvider platformProvider;
+
+    public CubicChunksMapRecognizer(CubicChunksPlatformProvider platformProvider) {
+        this.platformProvider = platformProvider;
+    }
+
     @Override
     public boolean isMap(File dir) {
-        return new File(dir, "level.dat").isFile() && new File(dir, "region3d").isDirectory();
+        return platformProvider.isCubicWorld(dir.toPath());
     }
 
     @Override

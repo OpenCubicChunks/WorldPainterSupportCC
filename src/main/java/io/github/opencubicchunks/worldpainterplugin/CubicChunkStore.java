@@ -1,20 +1,35 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
+import com.carrotsearch.hppc.IntHashSet;
+import com.carrotsearch.hppc.IntSet;
+import com.carrotsearch.hppc.procedures.IntProcedure;
 import cubicchunks.regionlib.impl.EntryLocation2D;
 import cubicchunks.regionlib.impl.EntryLocation3D;
 import cubicchunks.regionlib.impl.save.SaveSection2D;
 import cubicchunks.regionlib.impl.save.SaveSection3D;
+import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
 import org.jnbt.NBTInputStream;
 import org.jnbt.NBTOutputStream;
 import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.ChunkStore;
+import org.pepsoft.minecraft.MinecraftCoords;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -23,6 +38,8 @@ public class CubicChunkStore implements ChunkStore {
     private SaveSection2D section2d;
     private SaveSection3D section3d;
     private int maxHeight;
+
+    private volatile ConcurrentHashMap<MinecraftCoords, IntSet> chunks;
 
     public CubicChunkStore(File worldDir, int dimension, int maxHeight) throws IOException {
         this.maxHeight = maxHeight;
@@ -42,6 +59,52 @@ public class CubicChunkStore implements ChunkStore {
         Files.createDirectories(part3d);
         section2d = SaveSection2D.createAt(part2d);
         section3d = SaveSection3D.createAt(part3d);
+        chunks = null;
+    }
+
+    private synchronized Map<MinecraftCoords, IntSet> getChunks() {
+        if (chunks == null) {
+            try {
+                chunks = computeChunks();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+        return chunks;
+    }
+
+    private ConcurrentHashMap<MinecraftCoords, IntSet> computeChunks() throws IOException {
+        ConcurrentHashMap<MinecraftCoords, IntSet> map = new ConcurrentHashMap<>(8192);
+        section3d.forAllKeys(p -> map
+            .computeIfAbsent(new MinecraftCoords(p.getEntryX(), p.getEntryZ()), k -> new IntHashSet())
+            .add(p.getEntryY())
+        );
+        return map;
+    }
+
+    @Override public int getChunkCount() {
+        return getChunkCoords().size();
+    }
+
+    @Override public Set<MinecraftCoords> getChunkCoords() {
+        return getChunks().keySet();
+    }
+
+    @Override public boolean visitChunks(ChunkVisitor chunkVisitor) {
+        return visitChunks(chunkVisitor, EditMode.NORMAL);
+    }
+
+    @Override public boolean visitChunksForEditing(ChunkVisitor chunkVisitor) {
+        return visitChunks(chunkVisitor, EditMode.READONLY);
+    }
+
+    private boolean visitChunks(ChunkVisitor chunkVisitor, EditMode editMode) {
+        for (MinecraftCoords pos : getChunkCoords()) {
+            if (!chunkVisitor.visitChunk(loadChunk(pos.x, pos.z, editMode))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -63,6 +126,7 @@ public class CubicChunkStore implements ChunkStore {
             } catch (IOException e) {
                 throw new RuntimeException("I/O error saving chunk", e);
             }
+            getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new IntHashSet()).add(y);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (NBTOutputStream out = new NBTOutputStream(new BufferedOutputStream(new GZIPOutputStream(baos)))) {
@@ -95,44 +159,63 @@ public class CubicChunkStore implements ChunkStore {
 
     @Override
     public boolean isChunkPresent(int x, int z) {
-        try {
-            return section2d.hasEntry(new EntryLocation2D(x, z));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return getChunks().containsKey(new MinecraftCoords(x, z));
     }
 
     @Override
     public Chunk getChunk(int x, int z) {
-        try {
-            return section2d.load(new EntryLocation2D(x, z)).map(buf -> {
-                try (NBTInputStream in = new NBTInputStream(new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(buf.array()))))) {
-                    Map<Integer, CompoundTag> cubeTags = new HashMap<>();
-                    Set<EntryLocation3D> cubes = new HashSet<>();
-                    // inefficient but there is no other way
-                    section3d.forAllKeys(entry -> {
-                        if (entry.getEntryX() != x || entry.getEntryZ() != z) {
-                            return;
-                        }
-                        section3d.load(entry).map(b -> {
-                            try (NBTInputStream cubeIn = new NBTInputStream(new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(b.array()))))) {
-                                return new AbstractMap.SimpleEntry<>(entry.getEntryY(), (CompoundTag) cubeIn.readTag());
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }).ifPresent(e -> cubeTags.entrySet().add(e));
-                    });
-                    CompoundTag columnTag = (CompoundTag) in.readTag();
+        return loadChunk(x, z, EditMode.NORMAL);
+    }
 
-                    return new Chunk16Virtual(new Chunk16Virtual.SerializedColumn(columnTag, cubeTags), x, z, maxHeight);
+    public Chunk16Virtual loadChunk(int x, int z, EditMode editMode) {
+        try {
+            CompoundTag columnTag = section2d.load(new EntryLocation2D(x, z)).map(buf -> {
+                try (NBTInputStream in = new NBTInputStream(new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(buf.array()))))) {
+                    return (CompoundTag) in.readTag();
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new UncheckedIOException(e);
                 }
             }).orElse(null);
+
+            Map<Integer, CompoundTag> cubeTags = new HashMap<>();
+
+            getChunks().get(new MinecraftCoords(x, z)).forEach((IntProcedure) y-> {
+                try {
+                    section3d.load(new EntryLocation3D(x, y, z)).map(b -> {
+                        try (NBTInputStream cubeIn = new NBTInputStream(
+                            new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(b.array()))))) {
+                            return new AbstractMap.SimpleEntry<>(y, (CompoundTag) cubeIn.readTag());
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    }).ifPresent(e -> cubeTags.put(e.getKey(), e.getValue()));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+            if (cubeTags.isEmpty()) {
+                return null;
+            }
+            if (columnTag == null) {
+                columnTag = makeFakeColumnNBT(cubeTags.values().iterator().next());
+            }
+
+            return new Chunk16Virtual(new Chunk16Virtual.SerializedColumn(columnTag, cubeTags), x, z, maxHeight, editMode);
         } catch (IOException e) {
             throw new RuntimeException("I/O error loading chunk", e);
         }
+    }
+
+    private CompoundTag makeFakeColumnNBT(CompoundTag tag) {
+        CompoundTag srcLevel = (CompoundTag) tag.getTag("Level");
+        CompoundTag level = new CompoundTag("Level", new HashMap<>());
+        level.setTag("v", new ByteTag("v", (byte) 1));
+        level.setTag("x", srcLevel.getTag("x"));
+        level.setTag("z", srcLevel.getTag("z"));
+
+        CompoundTag out = new CompoundTag(tag.getName(), new HashMap<>());
+        out.setTag("Level", level);
+        return out;
     }
 
     @Override

@@ -1,23 +1,38 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
+import static java.util.stream.Collectors.toCollection;
+import static org.pepsoft.minecraft.Constants.TAG_LEVEL;
+
 import com.carrotsearch.hppc.IntObjectHashMap;
 import com.carrotsearch.hppc.IntObjectMap;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
-import org.jnbt.*;
-import org.pepsoft.minecraft.*;
+import org.jnbt.ByteTag;
+import org.jnbt.CompoundTag;
+import org.jnbt.IntArrayTag;
+import org.jnbt.IntTag;
+import org.jnbt.Tag;
+import org.pepsoft.minecraft.AbstractNBTItem;
+import org.pepsoft.minecraft.Chunk;
+import org.pepsoft.minecraft.Entity;
+import org.pepsoft.minecraft.Material;
+import org.pepsoft.minecraft.MinecraftCoords;
+import org.pepsoft.minecraft.TileEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.awt.*;
-import java.io.*;
-import java.util.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
-
-import static java.util.stream.Collectors.toCollection;
-import static org.pepsoft.minecraft.Constants.*;
 
 /**
  * This API's coordinate system is the Minecraft coordinate system (W <- x -> E,
@@ -51,22 +66,22 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     private boolean forceLightPopulated;
     private long inhabitedTime;
 
-    public Chunk16Virtual(int columnX, int columnZ, int maxHeight) {
+    public Chunk16Virtual(int columnX, int columnZ, int maxHeight, EditMode editMode) {
         super(new CompoundTag(TAG_LEVEL, new HashMap<>()));
         this.columnX = columnX;
         this.columnZ = columnZ;
         this.cubes = new IntObjectHashMap<>(64);
         this.maxHeight = maxHeight;
-        this.readOnly = false;
+        this.readOnly = editMode == EditMode.READONLY;
     }
 
-    public Chunk16Virtual(SerializedColumn serialized, int columnX, int columnZ, int maxHeight) {
-        super((CompoundTag) serialized.columnTag.getTag("Level"));
+    public Chunk16Virtual(SerializedColumn serialized, int columnX, int columnZ, int maxHeight, EditMode editMode) {
+        super(serialized.getColumnLevel());
         this.columnX = columnX;
         this.columnZ = columnZ;
         this.cubes = new IntObjectHashMap<>(64);
         this.maxHeight = maxHeight;
-        this.readOnly = false;
+        this.readOnly = editMode == EditMode.READONLY;
 
         loadColumnData();
         serialized.cubeTags.forEach((cubeY, tag) -> cubes.put(cubeY, new Cube16(this, tag)));
@@ -77,7 +92,8 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     //======================================
 
     private void loadColumnData() {
-        int version = getByte("v") & 0xFF;
+        Tag v = ((CompoundTag) super.toNBT()).getTag("v");
+        int version = (v instanceof IntTag) ? ((IntTag) v).getValue() : ((ByteTag) v).getValue();
         if (version != 1) {
             throw new IllegalArgumentException(String.format("Column has wrong version: %d", version));
         }
@@ -89,22 +105,27 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                     getxPos(), getzPos(), xCheck, zCheck, xCheck, zCheck);
         }
 
-        this.inhabitedTime = getInt("InhabitedTime");
+        this.inhabitedTime = getLong("InhabitedTime");
 
-        System.arraycopy(getByteArray("Biomes"), 0, biomes, 0, Coords.CUBE_SIZE * Coords.CUBE_SIZE);
+        // check for these tags because we may be dealing with what is actually cube NBT here in case column doesn't exist
+        if (containsTag("Biomes")) {
+            System.arraycopy(getByteArray("Biomes"), 0, biomes, 0, Coords.CUBE_SIZE * Coords.CUBE_SIZE);
+        }
 
-        ByteArrayInputStream buf = new ByteArrayInputStream(getByteArray("OpacityIndex"));
-        try (DataInputStream in = new DataInputStream(buf)) {
-            for (int i = 0; i < yMax.length; i++) {
-                in.skipBytes(Integer.BYTES);// skip yMin
-                this.yMax[i] = in.readInt() + 1;
-                // skip the opacity index, we don't need it, and we are going to set the isSurfaceTracked
-                // bit in cubes to false to rebuild it
-                int segmentCount = in.readUnsignedShort();
-                in.skipBytes(segmentCount * Integer.BYTES);
+        if (containsTag("OpacityIndex")) {
+            ByteArrayInputStream buf = new ByteArrayInputStream(getByteArray("OpacityIndex"));
+            try (DataInputStream in = new DataInputStream(buf)) {
+                for (int i = 0; i < yMax.length; i++) {
+                    in.skipBytes(Integer.BYTES);// skip yMin
+                    this.yMax[i] = in.readInt() + 1;
+                    // skip the opacity index, we don't need it, and we are going to set the isSurfaceTracked
+                    // bit in cubes to false to rebuild it
+                    int segmentCount = in.readUnsignedShort();
+                    in.skipBytes(segmentCount * Integer.BYTES);
+                }
+            } catch (IOException e) {
+                LOGGER.error("Error reading OpacityIndex, data will be removed", e);
             }
-        } catch (IOException e) {
-            LOGGER.error("Error reading OpacityIndex, data will be removed", e);
         }
     }
 
@@ -176,6 +197,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setBlockLightLevel(int blockX, int blockY, int blockZ, int level) {
+        if (readOnly) {
+            return;
+        }
         getOrMakeSection(blockY).setBlockLight(blockX, blockY, blockZ, level);
     }
 
@@ -186,6 +210,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setBlockType(int blockX, int blockY, int blockZ, int id) {
+        if (readOnly) {
+            return;
+        }
         getOrMakeSection(blockY).setId(blockX, blockY, blockZ, id);
     }
 
@@ -196,6 +223,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setDataValue(int blockX, int blockY, int blockZ, int val) {
+        if (readOnly) {
+            return;
+        }
         getOrMakeSection(blockY).setMeta(blockX, blockY, blockZ, val);
     }
 
@@ -206,6 +236,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setHeight(int blockX, int blockZ, int height) {
+        if (readOnly) {
+            return;
+        }
         yMax[Coords.index(blockX, blockZ)] = height;
     }
 
@@ -216,6 +249,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setSkyLightLevel(int blockX, int blockY, int blockZ, int val) {
+        if (readOnly) {
+            return;
+        }
         getOrMakeSection(blockY).setSkyLight(blockX, blockY, blockZ, val);
     }
 
@@ -230,8 +266,8 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     @Override
-    public Point getCoords() {
-        return new Point(getxPos(), getzPos());
+    public MinecraftCoords getCoords() {
+        return new MinecraftCoords(getxPos(), getzPos());
     }
 
     @Override
@@ -241,6 +277,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setTerrainPopulated(boolean terrainPopulated) {
+        if (readOnly) {
+            return;
+        }
         this.forcePopulated = terrainPopulated;
     }
 
@@ -252,6 +291,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setMaterial(int blockX, int blockY, int blockZ, Material material) {
+        if (readOnly) {
+            return;
+        }
         int id = material.blockType & 0xFF;
         int extId = material.blockType >> 8;
         Cube16 cube = getOrMakeSection(blockY);
@@ -282,11 +324,14 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public int getBiome(int blockX, int blockZ) {
-        return biomes == null ? 0 : biomes[Coords.index(blockX, blockZ)];
+        return biomes == null ? 0 : biomes[Coords.index(blockX, blockZ)] & 0xFF;
     }
 
     @Override
     public void setBiome(int blockX, int blockZ, int biome) {
+        if (readOnly) {
+            return;
+        }
         if (biomes == null) {
             biomes = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
         }
@@ -305,6 +350,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setLightPopulated(boolean lightPopulated) {
+        if (readOnly) {
+            return;
+        }
         this.forceLightPopulated = lightPopulated;
     }
 
@@ -315,6 +363,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setInhabitedTime(long inhabitedTime) {
+        if (readOnly) {
+            return;
+        }
         this.inhabitedTime = inhabitedTime;
     }
 
@@ -538,7 +589,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             return array;
         }
 
-        public int getY() {
+        int getY() {
             return yPos;
         }
 
@@ -586,6 +637,10 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         SerializedColumn(CompoundTag columnTag, Map<Integer, CompoundTag> sectionTags) {
             this.columnTag = columnTag;
             this.cubeTags = sectionTags;
+        }
+
+        CompoundTag getColumnLevel() {
+            return (CompoundTag) this.columnTag.getTag("Level");
         }
     }
 }
