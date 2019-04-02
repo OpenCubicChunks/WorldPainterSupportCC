@@ -1,7 +1,6 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
-import com.carrotsearch.hppc.IntHashSet;
-import com.carrotsearch.hppc.IntSet;
+import com.carrotsearch.hppc.IntArrayList;
 import com.carrotsearch.hppc.procedures.IntProcedure;
 import cubicchunks.regionlib.impl.EntryLocation2D;
 import cubicchunks.regionlib.impl.EntryLocation3D;
@@ -26,7 +25,9 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,7 +40,8 @@ public class CubicChunkStore implements ChunkStore {
     private SaveSection3D section3d;
     private int maxHeight;
 
-    private volatile ConcurrentHashMap<MinecraftCoords, IntSet> chunks;
+    private volatile Map<MinecraftCoords, IntArrayList> chunks;
+    private volatile List<MinecraftCoords> chunkOrder;
 
     public CubicChunkStore(File worldDir, int dimension, int maxHeight) throws IOException {
         this.maxHeight = maxHeight;
@@ -62,24 +64,35 @@ public class CubicChunkStore implements ChunkStore {
         chunks = null;
     }
 
-    private synchronized Map<MinecraftCoords, IntSet> getChunks() {
+    private void chunksLazyInit() {
         if (chunks == null) {
             try {
-                chunks = computeChunks();
+                Map<MinecraftCoords, IntArrayList> map = new ConcurrentHashMap<>(8192);
+                List<MinecraftCoords> chunkOrder = new ArrayList<>();
+                section3d.forAllKeys(p -> {
+                    MinecraftCoords coords = new MinecraftCoords(p.getEntryX(), p.getEntryZ());
+                    boolean alreadyExists = map.containsKey(coords);
+                    map.computeIfAbsent(coords, k -> new IntArrayList()).add(p.getEntryY());
+                    if (!alreadyExists) {
+                        chunkOrder.add(coords);
+                    }
+                });
+                this.chunks = map;
+                this.chunkOrder = chunkOrder;
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }
+    }
+
+    private synchronized Map<MinecraftCoords, IntArrayList> getChunks() {
+        chunksLazyInit();
         return chunks;
     }
 
-    private ConcurrentHashMap<MinecraftCoords, IntSet> computeChunks() throws IOException {
-        ConcurrentHashMap<MinecraftCoords, IntSet> map = new ConcurrentHashMap<>(8192);
-        section3d.forAllKeys(p -> map
-            .computeIfAbsent(new MinecraftCoords(p.getEntryX(), p.getEntryZ()), k -> new IntHashSet())
-            .add(p.getEntryY())
-        );
-        return map;
+    private synchronized List<MinecraftCoords> getChunkOrder() {
+        chunksLazyInit();
+        return chunkOrder;
     }
 
     @Override public int getChunkCount() {
@@ -99,7 +112,7 @@ public class CubicChunkStore implements ChunkStore {
     }
 
     private boolean visitChunks(ChunkVisitor chunkVisitor, EditMode editMode) {
-        for (MinecraftCoords pos : getChunkCoords()) {
+        for (MinecraftCoords pos : getChunkOrder()) {
             if (!chunkVisitor.visitChunk(loadChunk(pos.x, pos.z, editMode))) {
                 return false;
             }
@@ -126,7 +139,10 @@ public class CubicChunkStore implements ChunkStore {
             } catch (IOException e) {
                 throw new RuntimeException("I/O error saving chunk", e);
             }
-            getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new IntHashSet()).add(y);
+            // TODO: is this thread safe?
+            synchronized (this) {
+                getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new IntArrayList()).add(y);
+            }
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (NBTOutputStream out = new NBTOutputStream(new BufferedOutputStream(new GZIPOutputStream(baos)))) {

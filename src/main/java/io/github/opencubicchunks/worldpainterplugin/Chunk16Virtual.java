@@ -3,10 +3,6 @@ package io.github.opencubicchunks.worldpainterplugin;
 import static java.util.stream.Collectors.toCollection;
 import static org.pepsoft.minecraft.Constants.TAG_LEVEL;
 
-import com.carrotsearch.hppc.IntObjectHashMap;
-import com.carrotsearch.hppc.IntObjectMap;
-import com.carrotsearch.hppc.cursors.IntObjectCursor;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
 import org.jnbt.IntArrayTag;
@@ -51,7 +47,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     private int columnX;
     private int columnZ;
-    private final IntObjectMap<Cube16> cubes;
+    private final CubeMap cubes;
 
     private int[] yMax = new int[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
 
@@ -70,7 +66,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         super(new CompoundTag(TAG_LEVEL, new HashMap<>()));
         this.columnX = columnX;
         this.columnZ = columnZ;
-        this.cubes = new IntObjectHashMap<>(64);
+        this.cubes = new CubeMap();
         this.maxHeight = maxHeight;
         this.readOnly = editMode == EditMode.READONLY;
     }
@@ -79,12 +75,16 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         super(serialized.getColumnLevel());
         this.columnX = columnX;
         this.columnZ = columnZ;
-        this.cubes = new IntObjectHashMap<>(64);
+        this.cubes = new CubeMap();
         this.maxHeight = maxHeight;
         this.readOnly = editMode == EditMode.READONLY;
 
         loadColumnData();
-        serialized.cubeTags.forEach((cubeY, tag) -> cubes.put(cubeY, new Cube16(this, tag)));
+        serialized.cubeTags.forEach((cubeY, tag) -> loadCube(new Cube16(this, tag)));
+    }
+
+    private void loadCube(Cube16 cube) {
+        cubes.put(cube);
     }
 
     //======================================
@@ -108,12 +108,14 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         this.inhabitedTime = getLong("InhabitedTime");
 
         // check for these tags because we may be dealing with what is actually cube NBT here in case column doesn't exist
-        if (containsTag("Biomes")) {
-            System.arraycopy(getByteArray("Biomes"), 0, biomes, 0, Coords.CUBE_SIZE * Coords.CUBE_SIZE);
+        byte[] biomesArray = getByteArray("Biomes");
+        if (biomesArray != null) {
+            System.arraycopy(biomesArray, 0, biomes, 0, Coords.CUBE_SIZE * Coords.CUBE_SIZE);
         }
 
-        if (containsTag("OpacityIndex")) {
-            ByteArrayInputStream buf = new ByteArrayInputStream(getByteArray("OpacityIndex"));
+        byte[] opIndexRawData = getByteArray("OpacityIndex");
+        if (opIndexRawData != null) {
+            ByteArrayInputStream buf = new ByteArrayInputStream(opIndexRawData);
             try (DataInputStream in = new DataInputStream(buf)) {
                 for (int i = 0; i < yMax.length; i++) {
                     in.skipBytes(Integer.BYTES);// skip yMin
@@ -130,9 +132,11 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     public SerializedColumn serialize() {
-        Map<Integer, CompoundTag> tags = new HashMap<>(cubes.size() * 2);
-        for (IntObjectCursor<Cube16> cursor : cubes) {
-            tags.put(cursor.key, (CompoundTag) cursor.value.toNBT());
+        Map<Integer, CompoundTag> tags = new HashMap<>(cubes.array().length * 2);
+        for (Cube16 cube : cubes.array()) {
+            if (cube != null) {
+                tags.put(cube.getY(), (CompoundTag) cube.toNBT());
+            }
         }
         return new SerializedColumn((CompoundTag) toNBT(), tags);
     }
@@ -176,7 +180,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         int cubeY = Coords.blockToCube(blockY);
         Cube16 section = cubes.get(cubeY);
         if (section == null) {
-            cubes.put(cubeY, section = new Cube16(this, cubeY));
+            loadCube(section = new Cube16(this, cubeY));
         }
         return section;
     }
@@ -371,40 +375,43 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public int getHighestNonAirBlock(int blockX, int blockZ) {
+        int height = getHeight(blockX, blockZ);
         // start with opacity height and try to find anything up
-        int maxCube = Coords.blockToCube(getHeight(blockX, blockZ));
+        int maxCube = Coords.blockToCube(height);
+
+        Cube16[] array = cubes.array();
+        int minIdx = cubes.indexOfY(maxCube);
+        int startIdx = array.length - 1;
         // iterate over all cubes and only check ones that are above and aren't empty
-        for (ObjectCursor<Cube16> obj : cubes.values()) {
-            Cube16 cube = obj.value;
-            int cubeY = cube.getY();
+        for (int idx = startIdx; idx >= minIdx; idx--) {
+            Cube16 cube = array[idx];
             // this is expected to be the case most of the time
-            if (cubeY <= maxCube || cube.isEmpty()) {
+            if (cube == null || cube.isEmpty()) {
                 continue;
             }
+            // TODO: is it better fo leave this here or return approximation?
             for (int dy = 15; dy >= 0; dy--) {
-                if ((cube.getId(blockX, dy, blockZ) | cube.getExtId(blockX, dy, blockZ)) != 0) {
-                    maxCube = cubeY;
-                    break;
+                if (cube.getId(blockX, dy, blockZ) != 0 || cube.getExtId(blockX, dy, blockZ) != 0) {
+                    return Coords.localToBlock(cube.getY(), dy);
                 }
             }
         }
-        return Coords.cubeToMaxBlock(maxCube);
+        return height;
     }
 
     @Override
     public int getHighestNonAirBlock() {
-        int max = Coords.blockToCube(getHeight(0, 0));
-        for (ObjectCursor<Cube16> obj : cubes.values()) {
-            Cube16 cube = obj.value;
-            if (cube.isEmpty()) {
+        Cube16[] array = cubes.array();
+        for (int i = array.length - 1; i >= 0 ; i--) {
+            Cube16 cube = array[i];
+            if (cube == null) {
                 continue;
             }
-            int newY = cube.getY();
-            if (newY > max) {
-                max = newY;
+            if (!cube.isEmpty()) {
+                return Coords.cubeToMaxBlock(cube.getY());
             }
         }
-        return Coords.cubeToMaxBlock(max);
+        return org.pepsoft.worldpainter.Constants.MIN_HEIGHT;
     }
 
     public static class Cube16 extends AbstractNBTItem {
