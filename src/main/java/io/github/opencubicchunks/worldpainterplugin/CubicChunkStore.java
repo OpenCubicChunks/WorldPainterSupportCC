@@ -91,11 +91,11 @@ public class CubicChunkStore implements ChunkStore {
     }
 
     @Override public boolean visitChunks(ChunkVisitor chunkVisitor) {
-        return visitChunks(chunkVisitor, EditMode.NORMAL);
+        return visitChunks(chunkVisitor, EditMode.READONLY);
     }
 
     @Override public boolean visitChunksForEditing(ChunkVisitor chunkVisitor) {
-        return visitChunks(chunkVisitor, EditMode.READONLY);
+        return visitChunks(chunkVisitor, EditMode.EDITABLE);
     }
 
     private boolean visitChunks(ChunkVisitor chunkVisitor, EditMode editMode) {
@@ -164,7 +164,7 @@ public class CubicChunkStore implements ChunkStore {
 
     @Override
     public Chunk getChunk(int x, int z) {
-        return loadChunk(x, z, EditMode.NORMAL);
+        return loadChunk(x, z, EditMode.EDITABLE);
     }
 
     public Chunk16Virtual loadChunk(int x, int z, EditMode editMode) {

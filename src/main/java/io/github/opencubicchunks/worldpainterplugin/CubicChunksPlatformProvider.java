@@ -2,6 +2,8 @@ package io.github.opencubicchunks.worldpainterplugin;
 
 import static io.github.opencubicchunks.worldpainterplugin.Version.VERSION;
 import static java.util.Collections.singletonList;
+import static org.pepsoft.worldpainter.Constants.DIM_END;
+import static org.pepsoft.worldpainter.Constants.DIM_NETHER;
 import static org.pepsoft.worldpainter.Constants.DIM_NORMAL;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
 import static org.pepsoft.worldpainter.GameType.SURVIVAL;
@@ -17,7 +19,7 @@ import org.jnbt.CompoundTag;
 import org.jnbt.NBTInputStream;
 import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.ChunkStore;
-import org.pepsoft.worldpainter.DefaultPlugin;
+import org.pepsoft.worldpainter.Constants;
 import org.pepsoft.worldpainter.Platform;
 import org.pepsoft.worldpainter.World2;
 import org.pepsoft.worldpainter.exporting.JavaPostProcessor;
@@ -69,23 +71,33 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
                             .filter(name -> name.matches("DIM-?[\\d]+"))
                             .map(name -> name.substring("DIM".length()))
                             .mapToInt(Integer::parseInt), IntStream.of(0)
+                            .filter(this::isSupportedDimension)
+                            .map(this::toWPDimensionId)
                     ).toArray();
-                }
-            } else if (platform.equals(DefaultPlugin.JAVA_ANVIL)) {
-                try (Stream<Path> dirs = Files.list(world)) {
-                    return dirs.filter(path -> !isCubicChunksDimension(path))
-                        .map(Path::getFileName)
-                        .map(Path::toString)
-                        .filter(name -> name.matches("DIM-?[\\d]+"))
-                        .map(name -> name.substring("DIM".length()))
-                        .mapToInt(Integer::parseInt)
-                        .toArray();
                 }
             }
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
         return new int[0];
+    }
+
+    private int toWPDimensionId(int id) {
+        switch (id) {
+            case 0:
+                return DIM_NORMAL;
+            case 1:
+                return DIM_END;
+            case -1:
+                return DIM_NETHER;
+            default:
+                assert false;
+                return id;
+        }
+    }
+
+    private boolean isSupportedDimension(int id) {
+        return id == 0 || id == 1 || id == -1;
     }
 
     public boolean isCubicWorld(Path worldDir) {
@@ -122,7 +134,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
         if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
-        return new Chunk16Virtual(x, z, maxHeight, EditMode.NORMAL);
+        return new Chunk16Virtual(x, z, maxHeight, EditMode.EDITABLE);
     }
 
     @Override
@@ -172,10 +184,12 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     static final Platform CUBICCHUNKS = new Platform(
         "io.github.oopencubicchunks.cubicchunks",
         "Cubic Chunks (1.10.2-1.12.2)",
-            256, 256, Integer.MAX_VALUE / 2,
-            Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE,
-            Arrays.asList(SURVIVAL, CREATIVE),
-            singletonList(DEFAULT),
-            singletonList(DIM_NORMAL),
-            EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED));
+        256,
+        Math.min(Constants.MAX_HEIGHT, Integer.MAX_VALUE / 2),
+        Math.min(Constants.MAX_HEIGHT, Integer.MAX_VALUE / 2),
+        Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE,
+        Arrays.asList(SURVIVAL, CREATIVE),
+        singletonList(DEFAULT),
+        Arrays.asList(DIM_NORMAL, DIM_NETHER, DIM_END),
+        EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED));
 }
