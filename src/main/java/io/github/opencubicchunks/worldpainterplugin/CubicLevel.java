@@ -1,8 +1,11 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
+import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
+import org.jnbt.IntTag;
 import org.jnbt.NBTInputStream;
 import org.jnbt.NBTOutputStream;
+import org.jnbt.StringTag;
 import org.jnbt.Tag;
 import org.pepsoft.minecraft.AbstractNBTItem;
 import org.pepsoft.minecraft.Dimension;
@@ -19,6 +22,7 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static org.pepsoft.minecraft.Constants.*;
+import static org.pepsoft.worldpainter.DefaultPlugin.JAVA_ANVIL;
 
 // a copy of Level modified to support cubic chunks worlds
 public class CubicLevel extends AbstractNBTItem {
@@ -35,6 +39,12 @@ public class CubicLevel extends AbstractNBTItem {
         this.maxHeight = mapHeight;
         extraTags = null;
         setInt(TAG_VERSION, VERSION_ANVIL);
+        setInt(TAG_DATA_VERSION, DATA_VERSION_MC_1_12_2);
+        Map<String, Tag> versionTag = new HashMap<>();
+        versionTag.put(TAG_ID_, new IntTag(TAG_ID_, DATA_VERSION_MC_1_12_2));
+        versionTag.put(TAG_NAME, new StringTag(TAG_NAME, "WorldPainter"));
+        versionTag.put(TAG_SNAPSHOT, new ByteTag(TAG_SNAPSHOT, (byte) 0));
+        setMap(TAG_VERSION_, versionTag);
         addDimension(0);
     }
 

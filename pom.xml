@@ -27,6 +27,17 @@
     </repositories>
 
     <dependencies>
+        <!--<dependency>
+            <groupId>org.pepsoft.worldpainter</groupId>
+            <artifactId>WPGUI</artifactId>
+            <version>2.6.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.pepsoft.worldpainter</groupId>
+                    <artifactId>WPDynmapPreviewer</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>-->
         <dependency>
             <groupId>io.github.opencubicchunks</groupId>
             <artifactId>regionlib</artifactId>

@@ -3,6 +3,7 @@ package io.github.opencubicchunks.worldpainterplugin;
 import static java.util.stream.Collectors.toCollection;
 import static org.pepsoft.minecraft.Constants.TAG_LEVEL;
 
+import com.carrotsearch.hppc.ObjectIntIdentityHashMap;
 import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
 import org.jnbt.IntArrayTag;
@@ -28,6 +29,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 
@@ -195,6 +198,15 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         return cons.applyAsInt(section);
     }
 
+    private <T> T ifSectionExists(int blockY, Supplier<T> defaultValue, Function<Cube16, T> cons) {
+        int cubeY = Coords.blockToCube(blockY);
+        Cube16 section = cubes.get(cubeY);
+        if (section == null) {
+            return defaultValue.get();
+        }
+        return cons.apply(section);
+    }
+
     @Override
     public int getBlockLightLevel(int blockX, int blockY, int blockZ) {
         return ifSectionExists(blockY, 15, section -> section.getBlockLight(blockX, blockY, blockZ));
@@ -209,29 +221,33 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     @Override
+    @Deprecated
     public int getBlockType(int blockX, int blockY, int blockZ) {
-        return ifSectionExists(blockY, 0, section -> section.getId(blockX, blockY, blockZ));
+        return ifSectionExists(blockY, 0, section -> section.getMaterial(blockX, blockY, blockZ).blockType);
     }
 
     @Override
+    @Deprecated
     public void setBlockType(int blockX, int blockY, int blockZ, int id) {
         if (readOnly) {
             return;
         }
-        getOrMakeSection(blockY).setId(blockX, blockY, blockZ, id);
+        getOrMakeSection(blockY).setMaterial(blockX, blockY, blockZ, Material.get(id));
     }
 
     @Override
+    @Deprecated
     public int getDataValue(int blockX, int blockY, int blockZ) {
-        return ifSectionExists(blockY, 0, section -> section.getMeta(blockX, blockY, blockZ));
+        return ifSectionExists(blockY, 0, section -> section.getMaterial(blockX, blockY, blockZ).data);
     }
 
     @Override
+    @Deprecated
     public void setDataValue(int blockX, int blockY, int blockZ, int val) {
         if (readOnly) {
             return;
         }
-        getOrMakeSection(blockY).setMeta(blockX, blockY, blockZ, val);
+        getOrMakeSection(blockY).setMaterial(blockX, blockY, blockZ, Material.get(getBlockType(blockX, blockY, blockZ), val));
     }
 
     @Override
@@ -290,8 +306,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public Material getMaterial(int blockX, int blockY, int blockZ) {
-        int id = getBlockType(blockX, blockY, blockZ) | ifSectionExists(blockY, 0, s -> s.getExtId(blockX, blockY, blockZ)) << 8;
-        return Material.get(id, getDataValue(blockX, blockY, blockZ));
+        return ifSectionExists(blockY, () -> Material.AIR, c -> c.getMaterial(blockX, blockY, blockZ));
     }
 
     @Override
@@ -302,12 +317,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         if (readOnly) {
             return;
         }
-        int id = material.blockType & 0xFF;
-        int extId = material.blockType >> 8;
-        Cube16 cube = getOrMakeSection(blockY);
-        cube.setId(blockX, blockY, blockZ, id);
-        cube.setExtId(blockX, blockY, blockZ, extId);
-        cube.setMeta(blockX, blockY, blockZ, material.data);
+        getOrMakeSection(blockY).setMaterial(blockX, blockY, blockZ, material);
     }
 
     @Override
@@ -395,7 +405,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             }
             // TODO: is it better fo leave this here or return approximation?
             for (int dy = 15; dy >= 0; dy--) {
-                if (cube.getId(blockX, dy, blockZ) != 0 || cube.getExtId(blockX, dy, blockZ) != 0) {
+                if (cube.getMaterial(blockX, dy, blockZ) != Material.AIR) {
                     return Coords.localToBlock(cube.getY(), dy);
                 }
             }
@@ -436,17 +446,23 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         private final int yPos;
         private final List<Entity> entities;
         private final List<TileEntity> tileEntities;
-        private byte[] blocks;
-        private byte[] data;
+        private long[] blocks;
+        private int bits = 0;
+        private final ArrayList<Material> id2material = new ArrayList<>();
+        private final ObjectIntIdentityHashMap<Material> material2id = new ObjectIntIdentityHashMap<>();
         private byte[] skyLight;
         private byte[] blockLight;
-        private byte[] add;
 
         // a hack because of this NBT library works
         // it doesn't agree with nesting that doesn't directly correspond to in-memory nesting
         private AbstractNBTItem sectionNbtPlaceholder;
 
         private static final long serialVersionUID = 1L;
+
+        {
+            id2material.add(Material.AIR);
+            material2id.put(Material.AIR, 0);
+        }
 
         Cube16(Chunk16Virtual parent, CompoundTag tag) {
             super((CompoundTag) tag.getTag("Level"));
@@ -516,7 +532,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
         boolean isEmpty() {
             // data must be empty is blocks and add are null
-            return blocks == null && add == null;
+            return blocks == null;
         }
 
         int getBlockLight(int x, int y, int z) {
@@ -527,21 +543,6 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             return getDataByte(skyLight, x, y, z, 15);
         }
 
-        int getMeta(int x, int y, int z) {
-            return getDataByte(data, x, y, z, 0);
-        }
-
-        int getExtId(int x, int y, int z) {
-            return getDataByte(add, x, y, z, 0);
-        }
-
-        int getId(int x, int y, int z) {
-            if (blocks == null) {
-                return 0;
-            }
-            return blocks[Coords.index(x, y, z)] & 0xFF;
-        }
-
         void setBlockLight(int x, int y, int z, int val) {
             blockLight = setDataByte(blockLight, x, y, z, val, 0);
         }
@@ -550,22 +551,111 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             skyLight = setDataByte(skyLight, x, y, z, val, 15);
         }
 
-        void setMeta(int x, int y, int z, int val) {
-            data = setDataByte(data, x, y, z, val, 0);
+        void setMaterial(int x, int y, int z, Material mat) {
+            setMaterial(Coords.index(x, y, z), mat);
         }
 
-        void setExtId(int x, int y, int z, int val) {
-            add = setDataByte(add, x, y, z, val, 0);
-        }
-
-        void setId(int x, int y, int z, int val) {
-            if (blocks == null) {
-                if (val == 0) {
-                    return;
+        void setMaterial(int idx, Material mat) {
+            int id = material2id.getOrDefault(mat, -1);
+            if (id < 0) {
+                int newId = id2material.size();
+                id2material.add(mat);
+                material2id.put(mat, newId);
+                if (newId >= (1 << bits)) {
+                    resize(Integer.SIZE - Integer.numberOfLeadingZeros(newId));
                 }
-                blocks = new byte[BLOCK_COUNT];
+                id = newId;
             }
-            blocks[Coords.index(x, y, z)] = (byte) val;
+            setId(idx, id);
+        }
+
+        private void resize(int newBits) {
+            int[] ids = new int[4096];
+            for (int i = 0; i < 4096; i++) {
+                ids[i] = getId(i);
+            }
+            bits = newBits;
+            blocks = new long[bits * (4096 / 64)];
+            for (int i = 0; i < 4096; i++) {
+                setId(i, ids[i]);
+            }
+        }
+
+        Material getMaterial(int x, int y, int z) {
+            return getMaterial(Coords.index(x, y, z));
+        }
+
+        Material getMaterial(int idx) {
+            return id2material.get(getId(idx));
+        }
+
+        private int getId(int idx) {
+            if (blocks == null) {
+                return 0;
+            }
+            final int startBit = idx * bits;
+            final int mask = (1 << bits) - 1;
+            final int bitOffset = startBit & 63;
+            final int arrayIndex = startBit >>> 6;
+
+            if (bitOffset + bits <= 64) {
+                // |-----------------------xxxxxxxxxxxxxx---------------------------|
+                //  ^------bitOffset------^^----size----^^---(64-bits-bitOffset)---^
+                final int offsetFromEnd = 64 - bits - bitOffset;
+                long value = blocks[arrayIndex];
+                return ((int) (value >>> offsetFromEnd)) & mask;
+            } else {
+                // split across 2 longs
+                long v1 = blocks[arrayIndex];
+                long v2 = blocks[arrayIndex + 1];
+                //                                                   bitOffset+bits-64
+                //                                                     v============v
+                // |---------------------------------------xxxxxxxxxxx|xxxxxxxxxxxxxx------------------------------------|
+                //  ^--------------bitOffset--------------^^----------bits----------^^-------(128-bitOffset-bits)-------^
+                int off1 = bitOffset + bits - 64;
+                int off2 = 128 - bitOffset - bits;
+                long part1 = v1 << off1;
+                long part2 = v2 >>> off2;
+                return ((int) (part1 | part2)) & mask;
+            }
+        }
+
+        private void setId(int idx, int id) {
+            if (blocks == null && id == 0) {
+                return;
+            }
+            assert blocks != null;
+            final int startBit = idx * bits;
+            final int mask = -(1 << bits);
+            final int bitOffset = startBit & 63;
+            final int arrayIndex = startBit >>> 6;
+
+            if (bitOffset + bits <= 64) {
+                // |-----------------------xxxxxxxxxxxxxx---------------------------|
+                //  ^------bitOffset------^^----size----^^---(64-bits-bitOffset)---^
+                final int offsetFromEnd = 64 - bits - bitOffset;
+                long value = blocks[arrayIndex];
+                value &= Long.rotateLeft(mask, offsetFromEnd);
+                value |= ((long) id) << offsetFromEnd;
+                blocks[arrayIndex] = value;
+            } else {
+                // split across 2 longs
+                long v1 = blocks[arrayIndex];
+                long v2 = blocks[arrayIndex + 1];
+                //                                                   bitOffset+bits-64
+                //                                                     v============v
+                // |---------------------------------------xxxxxxxxxxx|xxxxxxxxxxxxxx------------------------------------|
+                //  ^--------------bitOffset--------------^^----------bits----------^^-------(128-bitOffset-bits)-------^
+                int off1 = bitOffset + bits - 64;
+                int off2 = 128 - bitOffset - bits;
+                v1 &= mask >> off1;
+                v1 |= ((long) id) >>> off1;
+                blocks[arrayIndex] = v1;
+                v2 &= ~((~mask) << off2);
+                v2 |= ((long) id) << off2;
+                blocks[arrayIndex + 1] = v2;
+            }
+            assert getId(idx) == id;
         }
 
         private int getDataByte(byte[] array, int x, int y, int z, int def) {
@@ -610,10 +700,28 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                 if (!load) {
                     return;
                 }
-                blocks = getByteArray("Blocks");
-                data = getByteArray("Data");
+                byte[] blocks = getByteArray("Blocks");
+                byte[] data = getByteArray("Data");
+                byte[] add = null;
                 if (containsTag("Add")) {
                     add = getByteArray("Add");
+                }
+                for (int i = 0; i < 2048; i++) {
+                    // Even byte -> least significant bits
+                    // Odd byte -> most significant bits
+                    int id1 = (blocks[i * 2] & 0xFF);
+                    if (add != null) {
+                        id1 |= (add[i] & 0xF) << 8;
+                    }
+                    int data1 = data[i] & 0xF;
+                    setMaterial(i * 2, Material.get(id1, data1));
+
+                    int id2 = (blocks[i * 2 + 1] & 0xFF);
+                    if (add != null) {
+                        id2 |= (add[i] & 0xF0) << 4;
+                    }
+                    int data2 = (data[i] & 0xF0) >> 4;
+                    setMaterial(i * 2 + 1, Material.get(id2, data2));
                 }
 
                 skyLight = getByteArray("SkyLight");
@@ -622,16 +730,36 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
             @Override
             public Tag toNBT() {
-                setByteArray("Blocks", blocks == null ? PLACEHOLDER_WRITE_FULL : blocks);
-                setByteArray("Data", data == null ? PLACEHOLDER_WRITE : data);
+                byte[] blocks = new byte[4096];
+                byte[] data = new byte[2048];
+                byte[] add = null;
+                for (int i = 0; i < 2048; i++) {
+                    // Even byte -> least significant bits
+                    // Odd byte -> most significant bits
+                    Material mat1 = getMaterial(i * 2);
+                    Material mat2 = getMaterial(i * 2 + 1);
+                    int idLSB1 = mat1.blockType & 0xFF;
+                    int idLSB2 = mat2.blockType & 0xFF;
+                    int idMSB1 = mat1.blockType >>> 8;
+                    int idMSB2 = (mat2.blockType >>> 8) << 4;
+                    int data1 = mat1.data;
+                    int data2 = mat2.data << 4;
+                    blocks[i * 2] = (byte) idLSB1;
+                    blocks[i * 2 + 1] = (byte) idLSB2;
+                    data[i] |= data1 | data2;
+                    if (idMSB1 != 0 || idMSB2 != 0) {
+                        if (add == null) {
+                            add = new byte[2048];
+                        }
+                        add[i] |= idMSB1 | idMSB2;
+                    }
+                }
+
+                setByteArray("Blocks", blocks);
+                setByteArray("Data", data);
 
                 if (add != null) {
-                    for (byte b : add) {
-                        if (b != 0) {
-                            setByteArray("Add", add);
-                            break;
-                        }
-                    }
+                    setByteArray("Add", add);
                 }
 
                 setByteArray("SkyLight", skyLight == null ? PLACEHOLDER_WRITE_SKYLIGHT : skyLight);
