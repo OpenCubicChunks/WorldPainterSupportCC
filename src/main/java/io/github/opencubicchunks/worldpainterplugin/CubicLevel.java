@@ -34,7 +34,7 @@ public class CubicLevel extends AbstractNBTItem {
         setBoolean("isCubicWorld", true);
         this.maxHeight = mapHeight;
         extraTags = null;
-        setInt(TAG_VERSION, SUPPORTED_VERSION_2);
+        setInt(TAG_VERSION, VERSION_ANVIL);
         addDimension(0);
     }
 
@@ -44,7 +44,7 @@ public class CubicLevel extends AbstractNBTItem {
             throw new IllegalArgumentException("mapHeight " + mapHeight + " not a power of two");
         }
         int version = getInt(TAG_VERSION);
-        if (version != SUPPORTED_VERSION_2) {
+        if (version != VERSION_ANVIL) {
             throw new IllegalArgumentException("Not a supported version: 0x" + Integer.toHexString(version));
         }
         this.maxHeight = mapHeight;
@@ -148,15 +148,15 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public boolean isHardcore() {
-        return getBoolean(TAG_HARDCORE);
+        return getBoolean(TAG_HARDCORE_);
     }
 
     public String getGeneratorName() {
-        return getString(TAG_GENERATOR_NAME);
+        return getString(TAG_GENERATOR_NAME_);
     }
 
     public int getGeneratorVersion() {
-        return getInt(TAG_GENERATOR_VERSION);
+        return getInt(TAG_GENERATOR_VERSION_);
     }
 
     public Generator getGenerator() {
@@ -172,11 +172,11 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public String getGeneratorOptions() {
-        return getString(TAG_GENERATOR_OPTIONS);
+        return getString(TAG_GENERATOR_OPTIONS_);
     }
 
     public boolean isAllowCommands() {
-        return getBoolean(TAG_ALLOW_COMMANDS);
+        return getBoolean(TAG_ALLOW_COMMANDS_);
     }
 
     public int getMaxHeight() {
@@ -260,25 +260,25 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public void setHardcore(boolean hardcore) {
-        setBoolean(TAG_HARDCORE, hardcore);
+        setBoolean(TAG_HARDCORE_, hardcore);
     }
 
     public void setGeneratorName(String generatorName) {
-        setString(TAG_GENERATOR_NAME, generatorName);
+        setString(TAG_GENERATOR_NAME_, generatorName);
     }
 
     public void setGenerator(Generator generator) {
         switch (generator) {
             case DEFAULT:
-                setString(TAG_GENERATOR_NAME, "default");
-                setInt(TAG_GENERATOR_VERSION, 1);
+                setString(TAG_GENERATOR_NAME_, "default");
+                setInt(TAG_GENERATOR_VERSION_, 1);
                 break;
             case FLAT:
-                setString(TAG_GENERATOR_NAME, "flat");
+                setString(TAG_GENERATOR_NAME_, "flat");
                 break;
             case LARGE_BIOMES:
-                setString(TAG_GENERATOR_NAME, "largeBiomes");
-                setInt(TAG_GENERATOR_VERSION, 0);
+                setString(TAG_GENERATOR_NAME_, "largeBiomes");
+                setInt(TAG_GENERATOR_VERSION_, 0);
                 break;
             default:
                 throw new IllegalArgumentException("Use setGeneratorName(String) for generator " + generator);
@@ -286,11 +286,11 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public void setGeneratorOptions(String generatorOptions) {
-        setString(TAG_GENERATOR_OPTIONS, generatorOptions);
+        setString(TAG_GENERATOR_OPTIONS_, generatorOptions);
     }
 
     public void setAllowCommands(boolean allowCommands) {
-        setBoolean(TAG_ALLOW_COMMANDS, allowCommands);
+        setBoolean(TAG_ALLOW_COMMANDS_, allowCommands);
     }
 
     public void setDifficulty(int difficulty) {

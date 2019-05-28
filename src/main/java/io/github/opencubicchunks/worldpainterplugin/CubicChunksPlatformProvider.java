@@ -22,7 +22,7 @@ import org.pepsoft.minecraft.ChunkStore;
 import org.pepsoft.worldpainter.Constants;
 import org.pepsoft.worldpainter.Platform;
 import org.pepsoft.worldpainter.World2;
-import org.pepsoft.worldpainter.exporting.JavaPostProcessor;
+import org.pepsoft.worldpainter.exporting.Java1_2PostProcessor;
 import org.pepsoft.worldpainter.exporting.PostProcessor;
 import org.pepsoft.worldpainter.exporting.WorldExporter;
 import org.pepsoft.worldpainter.mapexplorer.MapRecognizer;
@@ -169,7 +169,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
         if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
-        return new JavaPostProcessor();
+        return new Java1_2PostProcessor();
     }
 
     @Override

@@ -14,6 +14,7 @@ import org.pepsoft.minecraft.Entity;
 import org.pepsoft.minecraft.Material;
 import org.pepsoft.minecraft.MinecraftCoords;
 import org.pepsoft.minecraft.TileEntity;
+import org.pepsoft.minecraft.exception.IncompatibleMaterialException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -295,6 +296,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setMaterial(int blockX, int blockY, int blockZ, Material material) {
+        if (material.blockType == -1) {
+            throw new IncompatibleMaterialException(material);
+        }
         if (readOnly) {
             return;
         }
