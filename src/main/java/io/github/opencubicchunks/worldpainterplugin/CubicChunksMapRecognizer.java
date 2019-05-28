@@ -2,11 +2,14 @@ package io.github.opencubicchunks.worldpainterplugin;
 
 import org.pepsoft.minecraft.mapexplorer.JavaMinecraftDirectoryNode;
 import org.pepsoft.util.IconUtils;
+import org.pepsoft.worldpainter.Platform;
 import org.pepsoft.worldpainter.mapexplorer.MapRecognizer;
 import org.pepsoft.worldpainter.mapexplorer.Node;
 
 import javax.swing.*;
 import java.io.File;
+
+import static io.github.opencubicchunks.worldpainterplugin.CubicChunksPlatformProvider.CUBICCHUNKS;
 
 public class CubicChunksMapRecognizer implements MapRecognizer {
 
@@ -17,8 +20,12 @@ public class CubicChunksMapRecognizer implements MapRecognizer {
     }
 
     @Override
-    public boolean isMap(File dir) {
-        return platformProvider.isCubicWorld(dir.toPath());
+    public Platform identifyPlatform(File dir) {
+        if (platformProvider.isCubicWorld(dir.toPath())) {
+            return CUBICCHUNKS;
+        } else {
+            return null;
+        }
     }
 
     @Override

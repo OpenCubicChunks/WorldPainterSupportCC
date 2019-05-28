@@ -234,7 +234,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
             }
         }
 
-        ChunkFactory.Stats collectedStats = parallelExportRegions(dimension, platform, worldDir, progressReceiver);
+        ChunkFactory.Stats collectedStats = parallelExportRegions(dimension, worldDir, progressReceiver);
 
         // Calculate total size of dimension
         Set<Point> regions = new HashSet<>(), exportedRegions = new HashSet<>();
