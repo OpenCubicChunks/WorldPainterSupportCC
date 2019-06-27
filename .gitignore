@@ -1,2 +1,8 @@
 *.iml
 target/
+
+/.idea/
+
+# Project exclude paths
+/.gradle/
+/build/

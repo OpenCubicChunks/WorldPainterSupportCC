@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
  */
 public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
+    private static final boolean DEBUG = System.getProperty("cubicchunks.debug", "false").equalsIgnoreCase("true");
     private static final Logger LOGGER = LoggerFactory.getLogger(Chunk16Virtual.class);
 
     private int columnX;
@@ -625,8 +626,19 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                 return;
             }
             assert blocks != null;
+
+            int prevIdBefore = 0, prevIdAfter = 0;
+            if (DEBUG) {
+                if (idx > 0) {
+                    prevIdBefore = getId(idx - 1);
+                }
+                if (idx < 4095) {
+                    prevIdAfter = getId(idx + 1);
+                }
+            }
+
             final int startBit = idx * bits;
-            final int mask = -(1 << bits);
+            final long mask = -(1L << bits);
             final int bitOffset = startBit & 63;
             final int arrayIndex = startBit >>> 6;
 
@@ -656,6 +668,20 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                 blocks[arrayIndex + 1] = v2;
             }
             assert getId(idx) == id;
+            if (DEBUG) {
+                try {
+                    if (idx > 0) {
+                        int idBefore = getId(idx - 1);
+                        assert idBefore == prevIdBefore : "Id at block before got changed after setId, old: " + prevIdBefore + " new: " + idBefore;
+                    }
+                    if (idx < 4095) {
+                        int idAfter = getId(idx + 1);
+                        assert idAfter == prevIdAfter : "Id at block after got changed after setId, old: " + prevIdAfter + " new: " + idAfter;
+                    }
+                } catch (AssertionError e) {
+                    throw e;
+                }
+            }
         }
 
         private int getDataByte(byte[] array, int x, int y, int z, int def) {

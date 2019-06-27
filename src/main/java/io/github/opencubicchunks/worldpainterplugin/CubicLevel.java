@@ -38,13 +38,8 @@ public class CubicLevel extends AbstractNBTItem {
         setBoolean("isCubicWorld", true);
         this.maxHeight = mapHeight;
         extraTags = null;
-        setInt(TAG_VERSION, VERSION_ANVIL);
+        setInt(TAG_VERSION_, VERSION_ANVIL);
         setInt(TAG_DATA_VERSION, DATA_VERSION_MC_1_12_2);
-        Map<String, Tag> versionTag = new HashMap<>();
-        versionTag.put(TAG_ID_, new IntTag(TAG_ID_, DATA_VERSION_MC_1_12_2));
-        versionTag.put(TAG_NAME, new StringTag(TAG_NAME, "WorldPainter"));
-        versionTag.put(TAG_SNAPSHOT, new ByteTag(TAG_SNAPSHOT, (byte) 0));
-        setMap(TAG_VERSION_, versionTag);
         addDimension(0);
     }
 
@@ -53,7 +48,7 @@ public class CubicLevel extends AbstractNBTItem {
         if ((mapHeight & (mapHeight - 1)) != 0) {
             throw new IllegalArgumentException("mapHeight " + mapHeight + " not a power of two");
         }
-        int version = getInt(TAG_VERSION);
+        int version = getInt(TAG_VERSION_);
         if (version != VERSION_ANVIL) {
             throw new IllegalArgumentException("Not a supported version: 0x" + Integer.toHexString(version));
         }
