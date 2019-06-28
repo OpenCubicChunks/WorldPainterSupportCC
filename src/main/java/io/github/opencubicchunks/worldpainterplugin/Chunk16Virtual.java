@@ -147,7 +147,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     @Override
-    public Tag toNBT() {
+    public CompoundTag toNBT() {
         setInt("x", getxPos());
         setInt("z", getzPos());
         setInt("v", 1);
@@ -501,7 +501,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         }
 
         @Override
-        public Tag toNBT() {
+        public CompoundTag toNBT() {
             setByte("v", (byte) 1);
 
             // coords
@@ -755,7 +755,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             }
 
             @Override
-            public Tag toNBT() {
+            public CompoundTag toNBT() {
                 byte[] blocks = new byte[4096];
                 byte[] data = new byte[2048];
                 byte[] add = null;

@@ -1,11 +1,41 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
-import org.jnbt.ByteTag;
+import static org.pepsoft.minecraft.Constants.DATA_VERSION_MC_1_12_2;
+import static org.pepsoft.minecraft.Constants.TAG_ALLOW_COMMANDS_;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_CENTER_X;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_CENTER_Z;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_DAMAGE_PER_BLOCK;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_SAFE_ZONE;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_SIZE;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_SIZE_LERP_TARGET;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_SIZE_LERP_TIME;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_WARNING_BLOCKS;
+import static org.pepsoft.minecraft.Constants.TAG_BORDER_WARNING_TIME;
+import static org.pepsoft.minecraft.Constants.TAG_DATA;
+import static org.pepsoft.minecraft.Constants.TAG_DATA_VERSION;
+import static org.pepsoft.minecraft.Constants.TAG_DIFFICULTY;
+import static org.pepsoft.minecraft.Constants.TAG_DIFFICULTY_LOCKED;
+import static org.pepsoft.minecraft.Constants.TAG_GAME_TYPE;
+import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_NAME_;
+import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_OPTIONS_;
+import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_VERSION_;
+import static org.pepsoft.minecraft.Constants.TAG_HARDCORE_;
+import static org.pepsoft.minecraft.Constants.TAG_LAST_PLAYED;
+import static org.pepsoft.minecraft.Constants.TAG_LEVEL_NAME;
+import static org.pepsoft.minecraft.Constants.TAG_MAP_FEATURES;
+import static org.pepsoft.minecraft.Constants.TAG_MAP_HEIGHT;
+import static org.pepsoft.minecraft.Constants.TAG_RANDOM_SEED;
+import static org.pepsoft.minecraft.Constants.TAG_SPAWN_X;
+import static org.pepsoft.minecraft.Constants.TAG_SPAWN_Y;
+import static org.pepsoft.minecraft.Constants.TAG_SPAWN_Z;
+import static org.pepsoft.minecraft.Constants.TAG_TIME;
+import static org.pepsoft.minecraft.Constants.TAG_VERSION;
+import static org.pepsoft.minecraft.Constants.TAG_VERSION_;
+import static org.pepsoft.minecraft.Constants.VERSION_ANVIL;
+
 import org.jnbt.CompoundTag;
-import org.jnbt.IntTag;
 import org.jnbt.NBTInputStream;
 import org.jnbt.NBTOutputStream;
-import org.jnbt.StringTag;
 import org.jnbt.Tag;
 import org.pepsoft.minecraft.AbstractNBTItem;
 import org.pepsoft.minecraft.Dimension;
@@ -13,16 +43,17 @@ import org.pepsoft.worldpainter.AccessDeniedException;
 import org.pepsoft.worldpainter.Generator;
 import org.pepsoft.worldpainter.Platform;
 
-import java.io.*;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
-
-import static org.pepsoft.minecraft.Constants.*;
-import static org.pepsoft.worldpainter.DefaultPlugin.JAVA_ANVIL;
 
 // a copy of Level modified to support cubic chunks worlds
 public class CubicLevel extends AbstractNBTItem {
@@ -343,7 +374,7 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     @Override
-    public Tag toNBT() {
+    public CompoundTag toNBT() {
         Map<String, Tag> values = new HashMap<>();
         values.put(TAG_DATA, super.toNBT());
         if (extraTags != null) {
