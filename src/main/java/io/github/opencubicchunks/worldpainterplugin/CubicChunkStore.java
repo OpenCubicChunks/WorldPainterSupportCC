@@ -1,7 +1,7 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
-import com.carrotsearch.hppc.IntArrayList;
-import com.carrotsearch.hppc.procedures.IntProcedure;
+import cubicchunks.regionlib.api.region.key.IKey;
+import cubicchunks.regionlib.api.storage.SaveSection;
 import cubicchunks.regionlib.impl.EntryLocation2D;
 import cubicchunks.regionlib.impl.EntryLocation3D;
 import cubicchunks.regionlib.impl.save.SaveSection2D;
@@ -24,13 +24,15 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -40,7 +42,7 @@ public class CubicChunkStore implements ChunkStore {
     private SaveSection3D section3d;
     private int maxHeight;
 
-    private volatile Map<MinecraftCoords, IntArrayList> chunks;
+    private volatile Map<MinecraftCoords, ArrayList<Integer>> chunks;
     private volatile List<MinecraftCoords> chunkOrder;
 
     public CubicChunkStore(File worldDir, int dimension, int maxHeight) throws IOException {
@@ -67,12 +69,12 @@ public class CubicChunkStore implements ChunkStore {
     private void chunksLazyInit() {
         if (chunks == null) {
             try {
-                Map<MinecraftCoords, IntArrayList> map = new ConcurrentHashMap<>(8192);
+                Map<MinecraftCoords, ArrayList<Integer>> map = new ConcurrentHashMap<>(8192);
                 List<MinecraftCoords> chunkOrder = new ArrayList<>();
                 section3d.forAllKeys(p -> {
                     MinecraftCoords coords = new MinecraftCoords(p.getEntryX(), p.getEntryZ());
                     boolean alreadyExists = map.containsKey(coords);
-                    map.computeIfAbsent(coords, k -> new IntArrayList()).add(p.getEntryY());
+                    map.computeIfAbsent(coords, k -> new ArrayList<>()).add(p.getEntryY());
                     if (!alreadyExists) {
                         chunkOrder.add(coords);
                     }
@@ -85,7 +87,7 @@ public class CubicChunkStore implements ChunkStore {
         }
     }
 
-    private synchronized Map<MinecraftCoords, IntArrayList> getChunks() {
+    private synchronized Map<MinecraftCoords, ArrayList<Integer>> getChunks() {
         chunksLazyInit();
         return chunks;
     }
@@ -141,7 +143,7 @@ public class CubicChunkStore implements ChunkStore {
             }
             // TODO: is this thread safe?
             synchronized (this) {
-                getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new IntArrayList()).add(y);
+                getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new ArrayList<>()).add(y);
             }
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -165,8 +167,8 @@ public class CubicChunkStore implements ChunkStore {
 
     @Override
     public void flush() {
+        close();
         try {
-            close();
             init();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -184,41 +186,40 @@ public class CubicChunkStore implements ChunkStore {
     }
 
     public Chunk16Virtual loadChunk(int x, int z, EditMode editMode) {
+        Map<Integer, CompoundTag> cubeTags = Optional.ofNullable(getChunks().get(new MinecraftCoords(x, z))).map(list ->
+                list.stream()
+                        .map(y -> new EntryLocation3D(x, y, z))
+                        .map(pos -> new SimpleEntry<>(pos.getEntryY(), load(section3d, pos)))
+                        .filter(e -> e.getValue().isPresent())
+                        .map(e -> new SimpleEntry<>(e.getKey(), e.getValue().get()))
+                        .map(e -> new SimpleEntry<>(e.getKey(), readNbt(e.getValue())))
+                        .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue))
+        ).orElse(new HashMap<>());
+
+        if (cubeTags.isEmpty()) {
+            return null;
+        }
+        CompoundTag columnTag = load(section2d, new EntryLocation2D(x, z))
+                .map(this::readNbt)
+                .orElseGet(() -> makeFakeColumnNBT(cubeTags.values().iterator().next()));
+
+
+        return new Chunk16Virtual(new Chunk16Virtual.SerializedColumn(columnTag, cubeTags), x, z, maxHeight, editMode);
+    }
+
+    private <T extends IKey<T>> Optional<ByteBuffer> load(SaveSection<?, T> save, T loc) {
         try {
-            CompoundTag columnTag = section2d.load(new EntryLocation2D(x, z)).map(buf -> {
-                try (NBTInputStream in = new NBTInputStream(new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(buf.array()))))) {
-                    return (CompoundTag) in.readTag();
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }).orElse(null);
-
-            Map<Integer, CompoundTag> cubeTags = new HashMap<>();
-
-            getChunks().get(new MinecraftCoords(x, z)).forEach((IntProcedure) y-> {
-                try {
-                    section3d.load(new EntryLocation3D(x, y, z)).map(b -> {
-                        try (NBTInputStream cubeIn = new NBTInputStream(
-                            new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(b.array()))))) {
-                            return new AbstractMap.SimpleEntry<>(y, (CompoundTag) cubeIn.readTag());
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    }).ifPresent(e -> cubeTags.put(e.getKey(), e.getValue()));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
-            if (cubeTags.isEmpty()) {
-                return null;
-            }
-            if (columnTag == null) {
-                columnTag = makeFakeColumnNBT(cubeTags.values().iterator().next());
-            }
-
-            return new Chunk16Virtual(new Chunk16Virtual.SerializedColumn(columnTag, cubeTags), x, z, maxHeight, editMode);
+            return save.load(loc);
         } catch (IOException e) {
-            throw new RuntimeException("I/O error loading chunk", e);
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private CompoundTag readNbt(ByteBuffer buf) {
+        try (NBTInputStream in = new NBTInputStream(new BufferedInputStream(new GZIPInputStream(new ByteArrayInputStream(buf.array()))))) {
+            return (CompoundTag) in.readTag();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -243,9 +244,13 @@ public class CubicChunkStore implements ChunkStore {
     public void close() {
         try {
             section2d.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
             section3d.close();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
     }
 }
