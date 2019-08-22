@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.opencubicchunks"
-version = "1.0.0"
+version = "1.2.0-WP2.7.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -20,8 +20,8 @@ repositories {
 dependencies {
     implementation(group = "io.github.opencubicchunks", name = "regionlib", version = "0.57.0-SNAPSHOT")
     implementation(group = "com.carrotsearch", name = "hppc", version = "0.8.1")
-    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.6.5") {
+    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.7.0") {
         exclude(module = "WPDynmapPreviewer")
     }
-    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.6.5")
+    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.7.0")
 }

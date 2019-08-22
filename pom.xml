@@ -6,7 +6,7 @@
 
     <groupId>io.github.opencubicchunks</groupId>
     <artifactId>worldpainterplugin</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0-WP2.7.0</version>
 
     <!--<parent>
         <groupId>org.pepsoft.worldpainter</groupId>
@@ -30,7 +30,7 @@
         <dependency>
             <groupId>org.pepsoft.worldpainter</groupId>
             <artifactId>WPGUI</artifactId>
-            <version>2.6.5</version>
+            <version>2.7.0</version>
             <scope>provided</scope>
             <exclusions>
                 <exclusion>

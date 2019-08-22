@@ -24,7 +24,7 @@ import static org.pepsoft.worldpainter.Constants.*;
 
 public class CubicChunksWorldExporter extends AbstractWorldExporter {
     public CubicChunksWorldExporter(World2 world) {
-        super(world);
+        super(world, CubicChunksPlatformProvider.CUBICCHUNKS);
         if ((!world.getPlatform().equals(CubicChunksPlatformProvider.CUBICCHUNKS))) {
             throw new IllegalArgumentException("Unsupported platform " + world.getPlatform());
         }
