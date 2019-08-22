@@ -19,13 +19,8 @@ public class CubicChunksMapRecognizer implements MapRecognizer {
         this.platformProvider = platformProvider;
     }
 
-    @Override
-    public Platform identifyPlatform(File dir) {
-        if (platformProvider.isCubicWorld(dir.toPath())) {
-            return CUBICCHUNKS;
-        } else {
-            return null;
-        }
+    @Override public boolean isMap(File dir) {
+        return platformProvider.isCubicWorld(dir.toPath());
     }
 
     @Override

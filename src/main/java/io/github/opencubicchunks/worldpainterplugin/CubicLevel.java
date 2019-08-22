@@ -1,7 +1,8 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
 import static org.pepsoft.minecraft.Constants.DATA_VERSION_MC_1_12_2;
-import static org.pepsoft.minecraft.Constants.TAG_ALLOW_COMMANDS_;
+import static org.pepsoft.minecraft.Constants.SUPPORTED_VERSION_2;
+import static org.pepsoft.minecraft.Constants.TAG_ALLOW_COMMANDS;
 import static org.pepsoft.minecraft.Constants.TAG_BORDER_CENTER_X;
 import static org.pepsoft.minecraft.Constants.TAG_BORDER_CENTER_Z;
 import static org.pepsoft.minecraft.Constants.TAG_BORDER_DAMAGE_PER_BLOCK;
@@ -16,10 +17,10 @@ import static org.pepsoft.minecraft.Constants.TAG_DATA_VERSION;
 import static org.pepsoft.minecraft.Constants.TAG_DIFFICULTY;
 import static org.pepsoft.minecraft.Constants.TAG_DIFFICULTY_LOCKED;
 import static org.pepsoft.minecraft.Constants.TAG_GAME_TYPE;
-import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_NAME_;
-import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_OPTIONS_;
-import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_VERSION_;
-import static org.pepsoft.minecraft.Constants.TAG_HARDCORE_;
+import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_NAME;
+import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_OPTIONS;
+import static org.pepsoft.minecraft.Constants.TAG_GENERATOR_VERSION;
+import static org.pepsoft.minecraft.Constants.TAG_HARDCORE;
 import static org.pepsoft.minecraft.Constants.TAG_LAST_PLAYED;
 import static org.pepsoft.minecraft.Constants.TAG_LEVEL_NAME;
 import static org.pepsoft.minecraft.Constants.TAG_MAP_FEATURES;
@@ -30,8 +31,6 @@ import static org.pepsoft.minecraft.Constants.TAG_SPAWN_Y;
 import static org.pepsoft.minecraft.Constants.TAG_SPAWN_Z;
 import static org.pepsoft.minecraft.Constants.TAG_TIME;
 import static org.pepsoft.minecraft.Constants.TAG_VERSION;
-import static org.pepsoft.minecraft.Constants.TAG_VERSION_;
-import static org.pepsoft.minecraft.Constants.VERSION_ANVIL;
 
 import org.jnbt.CompoundTag;
 import org.jnbt.NBTInputStream;
@@ -69,7 +68,7 @@ public class CubicLevel extends AbstractNBTItem {
         setBoolean("isCubicWorld", true);
         this.maxHeight = mapHeight;
         extraTags = null;
-        setInt(TAG_VERSION_, VERSION_ANVIL);
+        setInt(TAG_VERSION, SUPPORTED_VERSION_2);
         setInt(TAG_DATA_VERSION, DATA_VERSION_MC_1_12_2);
         addDimension(0);
     }
@@ -79,8 +78,8 @@ public class CubicLevel extends AbstractNBTItem {
         if ((mapHeight & (mapHeight - 1)) != 0) {
             throw new IllegalArgumentException("mapHeight " + mapHeight + " not a power of two");
         }
-        int version = getInt(TAG_VERSION_);
-        if (version != VERSION_ANVIL) {
+        int version = getInt(TAG_VERSION);
+        if (version != SUPPORTED_VERSION_2) {
             throw new IllegalArgumentException("Not a supported version: 0x" + Integer.toHexString(version));
         }
         this.maxHeight = mapHeight;
@@ -184,15 +183,15 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public boolean isHardcore() {
-        return getBoolean(TAG_HARDCORE_);
+        return getBoolean(TAG_HARDCORE);
     }
 
     public String getGeneratorName() {
-        return getString(TAG_GENERATOR_NAME_);
+        return getString(TAG_GENERATOR_NAME);
     }
 
     public int getGeneratorVersion() {
-        return getInt(TAG_GENERATOR_VERSION_);
+        return getInt(TAG_GENERATOR_VERSION);
     }
 
     public Generator getGenerator() {
@@ -208,11 +207,11 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public String getGeneratorOptions() {
-        return getString(TAG_GENERATOR_OPTIONS_);
+        return getString(TAG_GENERATOR_OPTIONS);
     }
 
     public boolean isAllowCommands() {
-        return getBoolean(TAG_ALLOW_COMMANDS_);
+        return getBoolean(TAG_ALLOW_COMMANDS);
     }
 
     public int getMaxHeight() {
@@ -296,25 +295,25 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public void setHardcore(boolean hardcore) {
-        setBoolean(TAG_HARDCORE_, hardcore);
+        setBoolean(TAG_HARDCORE, hardcore);
     }
 
     public void setGeneratorName(String generatorName) {
-        setString(TAG_GENERATOR_NAME_, generatorName);
+        setString(TAG_GENERATOR_NAME, generatorName);
     }
 
     public void setGenerator(Generator generator) {
         switch (generator) {
             case DEFAULT:
-                setString(TAG_GENERATOR_NAME_, "default");
-                setInt(TAG_GENERATOR_VERSION_, 1);
+                setString(TAG_GENERATOR_NAME, "default");
+                setInt(TAG_GENERATOR_VERSION, 1);
                 break;
             case FLAT:
-                setString(TAG_GENERATOR_NAME_, "flat");
+                setString(TAG_GENERATOR_NAME, "flat");
                 break;
             case LARGE_BIOMES:
-                setString(TAG_GENERATOR_NAME_, "largeBiomes");
-                setInt(TAG_GENERATOR_VERSION_, 0);
+                setString(TAG_GENERATOR_NAME, "largeBiomes");
+                setInt(TAG_GENERATOR_VERSION, 0);
                 break;
             default:
                 throw new IllegalArgumentException("Use setGeneratorName(String) for generator " + generator);
@@ -322,11 +321,11 @@ public class CubicLevel extends AbstractNBTItem {
     }
 
     public void setGeneratorOptions(String generatorOptions) {
-        setString(TAG_GENERATOR_OPTIONS_, generatorOptions);
+        setString(TAG_GENERATOR_OPTIONS, generatorOptions);
     }
 
     public void setAllowCommands(boolean allowCommands) {
-        setBoolean(TAG_ALLOW_COMMANDS_, allowCommands);
+        setBoolean(TAG_ALLOW_COMMANDS, allowCommands);
     }
 
     public void setDifficulty(int difficulty) {

@@ -8,6 +8,7 @@ import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
 import org.jnbt.IntArrayTag;
 import org.jnbt.IntTag;
+import org.jnbt.ListTag;
 import org.jnbt.Tag;
 import org.pepsoft.minecraft.AbstractNBTItem;
 import org.pepsoft.minecraft.Chunk;
@@ -15,10 +16,10 @@ import org.pepsoft.minecraft.Entity;
 import org.pepsoft.minecraft.Material;
 import org.pepsoft.minecraft.MinecraftCoords;
 import org.pepsoft.minecraft.TileEntity;
-import org.pepsoft.minecraft.exception.IncompatibleMaterialException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Point;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -312,9 +313,6 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public void setMaterial(int blockX, int blockY, int blockZ, Material material) {
-        if (material.blockType == -1) {
-            throw new IncompatibleMaterialException(material);
-        }
         if (readOnly) {
             return;
         }
@@ -426,7 +424,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                 return Coords.cubeToMaxBlock(cube.getY());
             }
         }
-        return org.pepsoft.worldpainter.Constants.MIN_HEIGHT;
+        return 0;
     }
 
     public static class Cube16 extends AbstractNBTItem {
@@ -469,18 +467,28 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             super((CompoundTag) tag.getTag("Level"));
             this.parent = parent;
 
-            int version = getByte("v") & 0xFF;
+            @SuppressWarnings("unchecked") Map<String, Tag> tags = (Map<String, Tag>) super.toNBT().getValue();
+
+            int version = ((Number) tags.get("v").getValue()).intValue();
             if (version != 1) {
                 throw new IllegalArgumentException("Cube has wrong version! " + version);
             }
             yPos = getInt("y");
             sectionNbtPlaceholder = new PlaceholderNBT(true);
 
-            List<CompoundTag> entityTags = getList("Entities");
-            entities = entityTags.stream().map(Entity::fromNBT).collect(toCollection(ArrayList::new));
+            if (tags.get("Entities") instanceof ListTag) {
+                List<CompoundTag> entityTags = getList("Entities");
+                entities = entityTags.stream().map(Entity::fromNBT).collect(toCollection(ArrayList::new));
+            } else {
+                entities = new ArrayList<>();
+            }
 
-            List<CompoundTag> tileEntityTags = getList("TileEntities");
-            tileEntities = tileEntityTags.stream().map(TileEntity::fromNBT).collect(toCollection(ArrayList::new));
+            if (tags.get("TileEntities") instanceof ListTag) {
+                List<CompoundTag> tileEntityTags = getList("TileEntities");
+                tileEntities = tileEntityTags.stream().map(TileEntity::fromNBT).collect(toCollection(ArrayList::new));
+            } else {
+                tileEntities = new ArrayList<>();
+            }
         }
 
         private CompoundTag getSectionTag() {
@@ -790,7 +798,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
                 setByteArray("SkyLight", skyLight == null ? PLACEHOLDER_WRITE_SKYLIGHT : skyLight);
                 setByteArray("BlockLight", blockLight == null ? PLACEHOLDER_WRITE : blockLight);
-                return super.toNBT();
+                return (CompoundTag) super.toNBT();
             }
         }
     }

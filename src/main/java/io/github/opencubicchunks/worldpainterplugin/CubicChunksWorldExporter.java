@@ -24,7 +24,7 @@ import static org.pepsoft.worldpainter.Constants.*;
 
 public class CubicChunksWorldExporter extends AbstractWorldExporter {
     public CubicChunksWorldExporter(World2 world) {
-        super(world, CubicChunksPlatformProvider.CUBICCHUNKS);
+        super(world);
         if ((!world.getPlatform().equals(CubicChunksPlatformProvider.CUBICCHUNKS))) {
             throw new IllegalArgumentException("Unsupported platform " + world.getPlatform());
         }
@@ -234,7 +234,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
             }
         }
 
-        ChunkFactory.Stats collectedStats = parallelExportRegions(dimension, worldDir, progressReceiver);
+        ChunkFactory.Stats collectedStats = parallelExportRegions(dimension, platform, worldDir, progressReceiver);
 
         // Calculate total size of dimension
         Set<Point> regions = new HashSet<>(), exportedRegions = new HashSet<>();
