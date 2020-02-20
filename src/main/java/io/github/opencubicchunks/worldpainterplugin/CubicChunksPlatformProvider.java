@@ -8,11 +8,7 @@ import static org.pepsoft.worldpainter.Constants.DIM_NORMAL;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
 import static org.pepsoft.worldpainter.GameType.SURVIVAL;
 import static org.pepsoft.worldpainter.Generator.DEFAULT;
-import static org.pepsoft.worldpainter.Platform.Capability.BIOMES;
-import static org.pepsoft.worldpainter.Platform.Capability.BLOCK_BASED;
-import static org.pepsoft.worldpainter.Platform.Capability.PRECALCULATED_LIGHT;
-import static org.pepsoft.worldpainter.Platform.Capability.SEED;
-import static org.pepsoft.worldpainter.Platform.Capability.SET_SPAWN_POINT;
+import static org.pepsoft.worldpainter.Platform.Capability.*;
 
 import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
@@ -191,5 +187,5 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
         Arrays.asList(SURVIVAL, CREATIVE),
         singletonList(DEFAULT),
         Arrays.asList(DIM_NORMAL, DIM_NETHER, DIM_END),
-        EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED));
+        EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED, POPULATE));
 }

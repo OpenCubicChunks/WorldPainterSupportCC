@@ -115,8 +115,11 @@ public class CubicChunkStore implements ChunkStore {
 
     private boolean visitChunks(ChunkVisitor chunkVisitor, EditMode editMode) {
         for (MinecraftCoords pos : getChunkOrder()) {
-            if (!chunkVisitor.visitChunk(loadChunk(pos.x, pos.z, editMode))) {
-                return false;
+            Chunk16Virtual chunk = loadChunk(pos.x, pos.z, editMode);
+            if (chunk != null) {
+                if (!chunkVisitor.visitChunk(chunk)) {
+                    return false;
+                }
             }
         }
         return true;
@@ -209,7 +212,7 @@ public class CubicChunkStore implements ChunkStore {
 
     private <T extends IKey<T>> Optional<ByteBuffer> load(SaveSection<?, T> save, T loc) {
         try {
-            return save.load(loc);
+            return save.load(loc, true); // TODO: regionlib bug
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

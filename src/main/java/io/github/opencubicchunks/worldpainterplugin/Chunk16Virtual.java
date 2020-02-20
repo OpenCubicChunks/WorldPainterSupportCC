@@ -6,8 +6,13 @@ import static org.pepsoft.minecraft.Constants.TAG_LEVEL;
 import com.carrotsearch.hppc.ObjectIntIdentityHashMap;
 import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
+import org.jnbt.DoubleTag;
+import org.jnbt.FloatTag;
 import org.jnbt.IntArrayTag;
 import org.jnbt.IntTag;
+import org.jnbt.ListTag;
+import org.jnbt.LongTag;
+import org.jnbt.ShortTag;
 import org.jnbt.Tag;
 import org.pepsoft.minecraft.AbstractNBTItem;
 import org.pepsoft.minecraft.Chunk;
@@ -26,6 +31,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,7 +103,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     //======================================
 
     private void loadColumnData() {
-        Tag v = ((CompoundTag) super.toNBT()).getTag("v");
+        Tag v = super.toNBT().getTag("v");
         int version = (v instanceof IntTag) ? ((IntTag) v).getValue() : ((ByteTag) v).getValue();
         if (version != 1) {
             throw new IllegalArgumentException(String.format("Column has wrong version: %d", version));
@@ -140,10 +146,15 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         Map<Integer, CompoundTag> tags = new HashMap<>(cubes.array().length * 2);
         for (Cube16 cube : cubes.array()) {
             if (cube != null) {
-                tags.put(cube.getY(), (CompoundTag) cube.toNBT());
+                tags.put(cube.getY(), cube.toNBT());
             }
         }
-        return new SerializedColumn((CompoundTag) toNBT(), tags);
+        for (int i = 0; i < 16; i++) {
+            if (!tags.containsKey(i)) {
+                tags.put(i, new Cube16(this, i).toNBT());
+            }
+        }
+        return new SerializedColumn(toNBT(), tags);
     }
 
     @Override
@@ -436,8 +447,6 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         private static final byte[] PLACEHOLDER_WRITE = new byte[BLOCK_COUNT >> 1];
         // placeholder for writing to disk when original is empty, full byte version, filled with skylight 15
         private static final byte[] PLACEHOLDER_WRITE_SKYLIGHT = new byte[BLOCK_COUNT >> 1];
-        // placeholder for writing to disk when original is empty, full byte version
-        private static final byte[] PLACEHOLDER_WRITE_FULL = new byte[BLOCK_COUNT];
 
         static {
             Arrays.fill(PLACEHOLDER_WRITE_SKYLIGHT, (byte) 0xFF);
@@ -445,8 +454,6 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
         private Chunk16Virtual parent;
         private final int yPos;
-        private final List<Entity> entities;
-        private final List<TileEntity> tileEntities;
         private long[] blocks;
         private int bits = 0;
         private final ArrayList<Material> id2material = new ArrayList<>();
@@ -469,18 +476,45 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             super((CompoundTag) tag.getTag("Level"));
             this.parent = parent;
 
-            int version = getByte("v") & 0xFF;
+            int version = getNumber("v").byteValue() & 0xFF;
             if (version != 1) {
                 throw new IllegalArgumentException("Cube has wrong version! " + version);
             }
-            yPos = getInt("y");
+            yPos = getNumber("y").intValue();
             sectionNbtPlaceholder = new PlaceholderNBT(true);
 
-            List<CompoundTag> entityTags = getList("Entities");
-            entities = entityTags.stream().map(Entity::fromNBT).collect(toCollection(ArrayList::new));
+            List<CompoundTag> entityTags = getListSafe("Entities");
+            parent.entities.addAll(entityTags.stream().map(Entity::fromNBT).collect(toCollection(ArrayList::new)));
 
-            List<CompoundTag> tileEntityTags = getList("TileEntities");
-            tileEntities = tileEntityTags.stream().map(TileEntity::fromNBT).collect(toCollection(ArrayList::new));
+            List<CompoundTag> tileEntityTags = getListSafe("TileEntities");
+            parent.tileEntities.addAll(tileEntityTags.stream().map(TileEntity::fromNBT).collect(toCollection(ArrayList::new)));
+        }
+
+        @SuppressWarnings("unchecked")
+        private <T extends Tag> List<T> getListSafe(String name) {
+            Tag tag = getTag(name);
+            if (tag instanceof ListTag<?>) {
+                return ((ListTag<T>) tag).getValue();
+            }
+            return new ArrayList<>();
+        }
+
+        private Number getNumber(String v) {
+            Tag tag = getTag(v);
+            if (tag instanceof ByteTag) {
+                return ((ByteTag) tag).getValue();
+            } else if (tag instanceof ShortTag) {
+                return ((ShortTag) tag).getValue();
+            } else if (tag instanceof IntTag) {
+                return ((IntTag) tag).getValue();
+            } else if (tag instanceof LongTag) {
+                return ((LongTag) tag).getValue();
+            } else if (tag instanceof FloatTag) {
+                return ((FloatTag) tag).getValue();
+            } else if (tag instanceof DoubleTag) {
+                return ((DoubleTag) tag).getValue();
+            }
+            throw new RuntimeException("Unexpected number tag type " + tag.getClass() + ", value=" + tag);
         }
 
         private CompoundTag getSectionTag() {
@@ -495,8 +529,6 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             super(new CompoundTag("Level", new HashMap<>()));
             this.parent = parent;
             yPos = cubeY;
-            entities = new ArrayList<>();
-            tileEntities = new ArrayList<>();
             sectionNbtPlaceholder = new PlaceholderNBT(false);
         }
 
@@ -517,10 +549,12 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
             setBoolean("initLightDone", parent.forceLightPopulated);
 
-            setList("Sections", CompoundTag.class, Arrays.asList(sectionNbtPlaceholder.toNBT()));
+            setList("Sections", CompoundTag.class, Collections.singletonList(sectionNbtPlaceholder.toNBT()));
 
-            setList("Entities", CompoundTag.class, entities.stream().map(Entity::toNBT).collect(Collectors.toList()));
-            setList("TileEntities", CompoundTag.class, tileEntities.stream().map(TileEntity::toNBT).collect(Collectors.toList()));
+            setList("Entities", CompoundTag.class,
+                    parent.entities.stream().filter(this::isInCube).map(Entity::toNBT).collect(Collectors.toList()));
+            setList("TileEntities", CompoundTag.class,
+                    parent.tileEntities.stream().filter(this::isInCube).map(TileEntity::toNBT).collect(Collectors.toList()));
 
             setMap("LightingInfo", new HashMap<String, Tag>() {{
                 put("LastHeightMap", new IntArrayTag("LastHeightMap", parent.yMax));
@@ -529,6 +563,16 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             CompoundTag cubeNbt = new CompoundTag("", new HashMap<>());
             cubeNbt.setTag("Level", super.toNBT());
             return cubeNbt;
+        }
+
+        private boolean isInCube(TileEntity te) {
+            return (te.getY() >> 4) == this.yPos;
+        }
+
+        private boolean isInCube(Entity e) {
+            double[] pos = e.getPos();
+            int cubeY = (int) Math.floor(pos[1] / 16.0);
+            return cubeY == this.yPos;
         }
 
         boolean isEmpty() {
@@ -669,17 +713,13 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             }
             assert getId(idx) == id;
             if (DEBUG) {
-                try {
-                    if (idx > 0) {
-                        int idBefore = getId(idx - 1);
-                        assert idBefore == prevIdBefore : "Id at block before got changed after setId, old: " + prevIdBefore + " new: " + idBefore;
-                    }
-                    if (idx < 4095) {
-                        int idAfter = getId(idx + 1);
-                        assert idAfter == prevIdAfter : "Id at block after got changed after setId, old: " + prevIdAfter + " new: " + idAfter;
-                    }
-                } catch (AssertionError e) {
-                    throw e;
+                if (idx > 0) {
+                    int idBefore = getId(idx - 1);
+                    assert idBefore == prevIdBefore : "Id at block before got changed after setId, old: " + prevIdBefore + " new: " + idBefore;
+                }
+                if (idx < 4095) {
+                    int idAfter = getId(idx + 1);
+                    assert idAfter == prevIdAfter : "Id at block after got changed after setId, old: " + prevIdAfter + " new: " + idAfter;
                 }
             }
         }
@@ -740,6 +780,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                         id1 |= (add[i] & 0xF) << 8;
                     }
                     int data1 = data[i] & 0xF;
+
                     setMaterial(i * 2, Material.get(id1, data1));
 
                     int id2 = (blocks[i * 2 + 1] & 0xFF);

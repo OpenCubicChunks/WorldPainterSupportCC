@@ -1,7 +1,16 @@
 plugins {
     java
+    application // <-- add this
     maven
 }
+
+// add start here
+val run: JavaExec by tasks
+run.apply {
+    main = "org.pepsoft.worldpainter.Main"
+    classpath = java.sourceSets["main"].runtimeClasspath
+}
+//add end here
 
 group = "io.github.opencubicchunks"
 version = "1.2.0-WP2.7.0"
@@ -18,10 +27,10 @@ repositories {
 }
 
 dependencies {
-    implementation(group = "io.github.opencubicchunks", name = "regionlib", version = "0.57.0-SNAPSHOT")
+    implementation(group = "io.github.opencubicchunks", name = "regionlib", version = "0.61.0-SNAPSHOT")
     implementation(group = "com.carrotsearch", name = "hppc", version = "0.8.1")
-    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.7.0") {
+    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.7.4") {
         exclude(module = "WPDynmapPreviewer")
     }
-    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.7.0")
+    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.7.4")
 }
