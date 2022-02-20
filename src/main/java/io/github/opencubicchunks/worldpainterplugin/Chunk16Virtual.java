@@ -40,17 +40,6 @@ import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 
-/**
- * This API's coordinate system is the Minecraft coordinate system (W <- x -> E,
- * down <- y -> up, N <- z -> S).
- *
- * <p>This implementation maintains the invariant that the map block at y == 0
- * ALWAYS exists, and that any blocks above and below it are contiguous; that
- * is: there are no gaps in the column other than below the lowest and above the
- * highest map block.
- *
- * <p>Created by Pepijn on 12-2-2017.
- */
 public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     private static final boolean DEBUG = System.getProperty("cubicchunks.debug", "false").equalsIgnoreCase("true");
@@ -764,6 +753,9 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             PlaceholderNBT(boolean load) {
                 super(Cube16.this.getSectionTag());
                 if (!load) {
+                    return;
+                }
+                if (!this.containsTag("Blocks")) {
                     return;
                 }
                 byte[] blocks = getByteArray("Blocks");

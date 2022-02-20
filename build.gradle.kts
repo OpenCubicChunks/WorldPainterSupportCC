@@ -29,8 +29,8 @@ repositories {
 dependencies {
     implementation(group = "io.github.opencubicchunks", name = "regionlib", version = "0.61.0-SNAPSHOT")
     implementation(group = "com.carrotsearch", name = "hppc", version = "0.8.1")
-    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.7.4") {
+    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.7.18") {
         exclude(module = "WPDynmapPreviewer")
     }
-    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.7.4")
+    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.7.18")
 }
