@@ -26,11 +26,18 @@ repositories {
     maven { setUrl("http://repo.maven.apache.org/maven2") }
 }
 
+// TODO: update jide
+configurations.all { resolutionStrategy {
+    force("com.jidesoft:jide-dock:3.7.9")
+    force("com.jidesoft:jide-common:3.7.9")
+    force("com.jidesoft:jide-plaf-jdk7:3.7.9")
+} }
+
 dependencies {
     implementation(group = "io.github.opencubicchunks", name = "regionlib", version = "0.61.0-SNAPSHOT")
     implementation(group = "com.carrotsearch", name = "hppc", version = "0.8.1")
-    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.7.18") {
+    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.8.8") {
         exclude(module = "WPDynmapPreviewer")
     }
-    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.7.18")
+    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.8.8")
 }
