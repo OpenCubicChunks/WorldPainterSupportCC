@@ -2,9 +2,7 @@ package io.github.opencubicchunks.worldpainterplugin;
 
 import static io.github.opencubicchunks.worldpainterplugin.Version.VERSION;
 import static java.util.Collections.singletonList;
-import static org.pepsoft.worldpainter.Constants.DIM_END;
-import static org.pepsoft.worldpainter.Constants.DIM_NETHER;
-import static org.pepsoft.worldpainter.Constants.DIM_NORMAL;
+import static org.pepsoft.worldpainter.Constants.*;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
 import static org.pepsoft.worldpainter.GameType.SURVIVAL;
 import static org.pepsoft.worldpainter.Generator.DEFAULT;
@@ -15,15 +13,25 @@ import org.jnbt.CompoundTag;
 import org.jnbt.NBTInputStream;
 import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.ChunkStore;
+import org.pepsoft.minecraft.MinecraftCoords;
 import org.pepsoft.worldpainter.Constants;
 import org.pepsoft.worldpainter.Platform;
+import org.pepsoft.worldpainter.TileFactory;
 import org.pepsoft.worldpainter.World2;
-import org.pepsoft.worldpainter.exporting.Java1_2PostProcessor;
+import org.pepsoft.worldpainter.exporting.ExportSettings;
+import org.pepsoft.worldpainter.exporting.ExportSettingsEditor;
 import org.pepsoft.worldpainter.exporting.PostProcessor;
 import org.pepsoft.worldpainter.exporting.WorldExporter;
-import org.pepsoft.worldpainter.mapexplorer.MapRecognizer;
+import org.pepsoft.worldpainter.importing.JavaMapImporter;
+import org.pepsoft.worldpainter.importing.MapImporter;
+import org.pepsoft.worldpainter.mapexplorer.MapExplorerSupport;
+import org.pepsoft.worldpainter.mapexplorer.Node;
+import org.pepsoft.worldpainter.platforms.Java1_2PostProcessor;
+import org.pepsoft.worldpainter.platforms.JavaExportSettings;
+import org.pepsoft.worldpainter.platforms.JavaExportSettingsEditor;
 import org.pepsoft.worldpainter.plugins.AbstractPlugin;
 import org.pepsoft.worldpainter.plugins.BlockBasedPlatformProvider;
+import org.pepsoft.worldpainter.plugins.MapImporterProvider;
 import org.pepsoft.worldpainter.util.MinecraftUtil;
 
 import java.io.BufferedInputStream;
@@ -35,11 +43,12 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
-public class CubicChunksPlatformProvider extends AbstractPlugin implements BlockBasedPlatformProvider {
+public class CubicChunksPlatformProvider extends AbstractPlugin implements BlockBasedPlatformProvider, MapImporterProvider, MapExplorerSupport {
     public CubicChunksPlatformProvider() {
         super("CubicChunksPlatform", VERSION);
         init();
@@ -104,7 +113,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
         try (NBTInputStream in = new NBTInputStream(new BufferedInputStream(new GZIPInputStream(Files.newInputStream(levelDat))))) {
             CompoundTag tag = (CompoundTag) in.readTag();
             CompoundTag data = (CompoundTag) tag.getTag("Data");
-            return ((ByteTag) data.getTag("isCubicWorld")).getValue() == 1;
+            return (data != null) && data.containsTag("isCubicWorld") && ((ByteTag) data.getTag("isCubicWorld")).getValue() == 1;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -161,6 +170,25 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     }
 
     @Override
+    public MapInfo identifyMap(File dir) {
+        if (isCubicWorld(dir.toPath())) {
+            return new MapInfo(dir, CUBICCHUNKS, dir.getName(), CubicChunksMapRecognizer.CubicChunksRootNode.ICON, CUBICCHUNKS.maxMaxHeight);
+        } else {
+            return null;
+        }
+    }
+
+    @Override
+    public ExportSettings getDefaultExportSettings() {
+        return new JavaExportSettings();
+    }
+
+    @Override
+    public ExportSettingsEditor getExportSettingsEditor() {
+        return new JavaExportSettingsEditor();
+    }
+
+    @Override
     public PostProcessor getPostProcessor(Platform platform) {
         if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
@@ -168,13 +196,22 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
         return new Java1_2PostProcessor();
     }
 
-    @Override
-    public MapRecognizer getMapRecognizer() {
-        return new CubicChunksMapRecognizer(this);
-    }
-
     private void init() {
 
+    }
+
+    // MapImporterProvider
+
+    @Override
+    public MapImporter getImporter(File dir, TileFactory tileFactory, Set<MinecraftCoords> chunksToSkip, MapImporter.ReadOnlyOption readOnlyOption, Set<Integer> dimensionsToImport) {
+        return new JavaMapImporter(CUBICCHUNKS, tileFactory, new File(dir, "level.dat"), false, chunksToSkip, readOnlyOption, dimensionsToImport);
+    }
+
+    // MapExplorerSupport
+
+    @Override
+    public Node getMapNode(File mapDir) {
+        return new CubicChunksMapRecognizer.CubicChunksRootNode(mapDir);
     }
 
     static final Platform CUBICCHUNKS = new Platform(

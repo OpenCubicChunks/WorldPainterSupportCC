@@ -43,6 +43,6 @@ public class CubicChunksMapRecognizer implements MapRecognizer {
             return ICON;
         }
 
-        private static final Icon ICON = IconUtils.scaleIcon(IconUtils.loadScaledIcon("io/github/opencubicchunks/worldpainterplugin/logo.png"), 16);
+        static final Icon ICON = IconUtils.scaleIcon(IconUtils.loadScaledIcon(CubicChunksMapRecognizer.class.getClassLoader(), "io/github/opencubicchunks/worldpainterplugin/logo.png"), 16);
     }
 }
