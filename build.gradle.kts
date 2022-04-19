@@ -13,7 +13,7 @@ run.apply {
 //add end here
 
 group = "io.github.opencubicchunks"
-version = "1.2.0-WP2.7.0"
+version = "1.3.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8

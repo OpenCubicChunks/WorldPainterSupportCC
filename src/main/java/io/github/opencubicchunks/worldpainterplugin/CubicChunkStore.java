@@ -13,6 +13,8 @@ import org.jnbt.NBTOutputStream;
 import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.ChunkStore;
 import org.pepsoft.minecraft.MinecraftCoords;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -37,14 +39,16 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public class CubicChunkStore implements ChunkStore {
+    private static final Logger LOGGER = LoggerFactory.getLogger("CubicChunkStore");
+    // Workaround for WP re-creating a chunk store for every region
+    // note: we don't care about race conditions on this field, they shouldn't cause any issues,
+    // beyond possibly keeping the wrong value in cache, which is not an issue
+    private static volatile ChunkListHolder LAST_CHUNK_LIST;
     private final Path path;
     private SaveSection2D section2d;
     private SaveSection3D section3d;
-    private int maxHeight;
-
-    private volatile Map<MinecraftCoords, ArrayList<Integer>> chunks;
-    private volatile List<MinecraftCoords> chunkOrder;
-
+    private final int maxHeight;
+    private ChunkListHolder chunks;
     public CubicChunkStore(File worldDir, int dimension, int maxHeight) throws IOException {
         this.maxHeight = maxHeight;
         Path path = worldDir.toPath();
@@ -54,7 +58,6 @@ public class CubicChunkStore implements ChunkStore {
         this.path = path;
         init();
     }
-
     private void init() throws IOException {
         Files.createDirectories(path);
         Path part2d = path.resolve("region2d");
@@ -63,7 +66,14 @@ public class CubicChunkStore implements ChunkStore {
         Files.createDirectories(part3d);
         section2d = SaveSection2D.createAt(part2d);
         section3d = SaveSection3D.createAt(part3d);
-        chunks = null;
+        ChunkListHolder lastChunkList = LAST_CHUNK_LIST;
+        if (lastChunkList != null && lastChunkList.path.equals(path)) {
+            LOGGER.info("Using cached chunk map for path " + path);
+            chunks = lastChunkList;
+        } else {
+            LOGGER.info("No cached chunk map for this world, new chunk map will be loaded for " + path);
+            chunks = null;
+        }
     }
 
     private void chunksLazyInit() {
@@ -79,8 +89,8 @@ public class CubicChunkStore implements ChunkStore {
                         chunkOrder.add(coords);
                     }
                 });
-                this.chunks = map;
-                this.chunkOrder = chunkOrder;
+                this.chunks = new ChunkListHolder(map, chunkOrder, path);
+                LAST_CHUNK_LIST = this.chunks;
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -89,12 +99,12 @@ public class CubicChunkStore implements ChunkStore {
 
     private synchronized Map<MinecraftCoords, ArrayList<Integer>> getChunks() {
         chunksLazyInit();
-        return chunks;
+        return chunks.map;
     }
 
     private synchronized List<MinecraftCoords> getChunkOrder() {
         chunksLazyInit();
-        return chunkOrder;
+        return chunks.chunkOrder;
     }
 
     @Override public int getChunkCount() {
@@ -254,6 +264,19 @@ public class CubicChunkStore implements ChunkStore {
             section3d.close();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private static class ChunkListHolder {
+        Map<MinecraftCoords, ArrayList<Integer>> map;
+        List<MinecraftCoords> chunkOrder;
+
+        Path path;
+
+        public ChunkListHolder(Map<MinecraftCoords, ArrayList<Integer>> chunks, List<MinecraftCoords> chunkOrder, Path path) {
+            this.map = chunks;
+            this.chunkOrder = chunkOrder;
+            this.path = path;
         }
     }
 }
