@@ -127,8 +127,12 @@ public class CubicChunkStore implements ChunkStore {
         for (MinecraftCoords pos : getChunkOrder()) {
             Chunk16Virtual chunk = loadChunk(pos.x, pos.z, editMode);
             if (chunk != null) {
-                if (!chunkVisitor.visitChunk(chunk)) {
-                    return false;
+                try {
+                    if (!chunkVisitor.visitChunk(chunk)) {
+                        return false;
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
             }
         }

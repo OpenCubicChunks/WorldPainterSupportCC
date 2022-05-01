@@ -33,6 +33,8 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
     @Override
     public Map<Integer, ChunkFactory.Stats> export(File baseDir, String name, File backupDir, ProgressReceiver progressReceiver) throws IOException, ProgressReceiver.OperationCancelled {
         // Sanity checks
+        final Set<Point> selectedTiles = world.getTilesToExport();
+        final Set<Integer> selectedDimensions = world.getDimensionsToExport();
         if ((selectedTiles == null) && (selectedDimensions != null)) {
             throw new IllegalArgumentException("Exporting a subset of dimensions not supported");
         }
@@ -238,8 +240,8 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
 
         // Calculate total size of dimension
         Set<Point> regions = new HashSet<>(), exportedRegions = new HashSet<>();
-        if (selectedTiles != null) {
-            for (Point tile : selectedTiles) {
+        if (world.getTilesToExport() != null) {
+            for (Point tile : world.getTilesToExport()) {
                 regions.add(new Point(tile.x >> 2, tile.y >> 2));
             }
         } else {
