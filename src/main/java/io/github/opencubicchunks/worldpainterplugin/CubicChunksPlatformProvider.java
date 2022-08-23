@@ -179,13 +179,13 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     }
 
     @Override
-    public ExportSettings getDefaultExportSettings() {
+    public ExportSettings getDefaultExportSettings(Platform platform) {
         return new JavaExportSettings();
     }
 
     @Override
-    public ExportSettingsEditor getExportSettingsEditor() {
-        return new JavaExportSettingsEditor();
+    public ExportSettingsEditor getExportSettingsEditor(Platform platform) {
+        return new JavaExportSettingsEditor(platform);
     }
 
     @Override
@@ -204,7 +204,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
 
     @Override
     public MapImporter getImporter(File dir, TileFactory tileFactory, Set<MinecraftCoords> chunksToSkip, MapImporter.ReadOnlyOption readOnlyOption, Set<Integer> dimensionsToImport) {
-        return new JavaMapImporter(CUBICCHUNKS, tileFactory, new File(dir, "level.dat"), false, chunksToSkip, readOnlyOption, dimensionsToImport);
+        return new JavaMapImporter(CUBICCHUNKS, tileFactory, new File(dir, "level.dat"), chunksToSkip, readOnlyOption, dimensionsToImport);
     }
 
     // MapExplorerSupport

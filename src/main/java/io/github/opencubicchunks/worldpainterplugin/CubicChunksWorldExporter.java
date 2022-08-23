@@ -5,6 +5,7 @@ import org.pepsoft.util.FileUtils;
 import org.pepsoft.util.ProgressReceiver;
 import org.pepsoft.worldpainter.*;
 import org.pepsoft.worldpainter.Dimension;
+import org.pepsoft.worldpainter.Dimension.Anchor;
 import org.pepsoft.worldpainter.exporting.AbstractWorldExporter;
 import org.pepsoft.worldpainter.exporting.JavaWorldExporter;
 import org.pepsoft.worldpainter.history.HistoryEntry;
@@ -21,6 +22,8 @@ import java.util.*;
 import static org.pepsoft.minecraft.Constants.DIFFICULTY_HARD;
 import static org.pepsoft.minecraft.Constants.GAME_TYPE_SURVIVAL;
 import static org.pepsoft.worldpainter.Constants.*;
+import static org.pepsoft.worldpainter.Dimension.Anchor.*;
+import static org.pepsoft.worldpainter.Dimension.Role.DETAIL;
 
 public class CubicChunksWorldExporter extends AbstractWorldExporter {
     public CubicChunksWorldExporter(World2 world) {
@@ -60,7 +63,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
         long start = System.currentTimeMillis();
 
         // Export dimensions
-        Dimension dim0 = world.getDimension(0);
+        Dimension dim0 = world.getDimension(NORMAL_DETAIL);
         CubicLevel level = new CubicLevel(world.getMaxHeight(), world.getPlatform());
         level.setSeed(dim0.getMinecraftSeed());
         level.setName(name);
@@ -139,7 +142,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
             selectedDimension = -1;
             boolean first = true;
             for (Dimension dimension : world.getDimensions()) {
-                if (dimension.getDim() < 0) {
+                if (dimension.getAnchor().dim < 0) {
                     // This dimension will be exported as part of another
                     // dimension, so skip it
                     continue;
@@ -149,11 +152,11 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
                 } else if (progressReceiver != null) {
                     progressReceiver.reset();
                 }
-                stats.put(dimension.getDim(), exportDimension(worldDir, dimension, world.getPlatform(), progressReceiver));
+                stats.put(dimension.getAnchor().dim, exportDimension(worldDir, dimension, world.getPlatform(), progressReceiver));
             }
         } else {
             selectedDimension = selectedDimensions.iterator().next();
-            stats.put(selectedDimension, exportDimension(worldDir, world.getDimension(selectedDimension), world.getPlatform(), progressReceiver));
+            stats.put(selectedDimension, exportDimension(worldDir, world.getDimension(new Anchor(selectedDimension, DETAIL, false, 0)), world.getPlatform(), progressReceiver));
         }
 
         // Update the session.lock file, hopefully kicking out any Minecraft instances which may have tried to open the
@@ -167,7 +170,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
         if (selectedTiles == null) {
             world.addHistoryEntry(HistoryEntry.WORLD_EXPORTED_FULL, name, worldDir);
         } else {
-            world.addHistoryEntry(HistoryEntry.WORLD_EXPORTED_PARTIAL, name, worldDir, world.getDimension(selectedDimension).getName());
+            world.addHistoryEntry(HistoryEntry.WORLD_EXPORTED_PARTIAL, name, worldDir, world.getDimension(new Anchor(selectedDimension, DETAIL, false, 0)).getName());
         }
 
         // Log an event
@@ -181,18 +184,15 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
             event.setAttribute(ATTRIBUTE_KEY_GAME_TYPE_NAME, world.getGameType().name());
             event.setAttribute(ATTRIBUTE_KEY_ALLOW_CHEATS, world.isAllowCheats());
             event.setAttribute(ATTRIBUTE_KEY_GENERATOR, world.getGenerator().name());
-            if (world.getPlatform().equals(DefaultPlugin.JAVA_ANVIL) && (world.getGenerator() == Generator.FLAT)) {
-                event.setAttribute(ATTRIBUTE_KEY_GENERATOR_OPTIONS, world.getGeneratorOptions());
-            }
-            Dimension dimension = world.getDimension(0);
+            Dimension dimension = world.getDimension(NORMAL_DETAIL);
             event.setAttribute(ATTRIBUTE_KEY_TILES, dimension.getTiles().size());
             logLayers(dimension, event, "");
-            dimension = world.getDimension(1);
+            dimension = world.getDimension(NETHER_DETAIL);
             if (dimension != null) {
                 event.setAttribute(ATTRIBUTE_KEY_NETHER_TILES, dimension.getTiles().size());
                 logLayers(dimension, event, "nether.");
             }
-            dimension = world.getDimension(2);
+            dimension = world.getDimension(END_DETAIL);
             if (dimension != null) {
                 event.setAttribute(ATTRIBUTE_KEY_END_TILES, dimension.getTiles().size());
                 logLayers(dimension, event, "end.");
@@ -213,21 +213,21 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
     protected ChunkFactory.Stats exportDimension(File worldDir, Dimension dimension, Platform platform, ProgressReceiver progressReceiver) throws ProgressReceiver.OperationCancelled, IOException {
         File dimensionDir;
         Dimension ceiling;
-        switch (dimension.getDim()) {
+        switch (dimension.getAnchor().dim) {
             case DIM_NORMAL:
                 dimensionDir = worldDir;
-                ceiling = dimension.getWorld().getDimension(DIM_NORMAL_CEILING);
+                ceiling = dimension.getWorld().getDimension(NORMAL_DETAIL_CEILING);
                 break;
             case DIM_NETHER:
                 dimensionDir = new File(worldDir, "DIM-1");
-                ceiling = dimension.getWorld().getDimension(DIM_NETHER_CEILING);
+                ceiling = dimension.getWorld().getDimension(NETHER_DETAIL_CEILING);
                 break;
             case DIM_END:
                 dimensionDir = new File(worldDir, "DIM1");
-                ceiling = dimension.getWorld().getDimension(DIM_END_CEILING);
+                ceiling = dimension.getWorld().getDimension(END_DETAIL_CEILING);
                 break;
             default:
-                throw new IllegalArgumentException("Dimension " + dimension.getDim() + " not supported");
+                throw new IllegalArgumentException("Dimension " + dimension.getAnchor().dim + " not supported");
         }
         File regionDir = new File(dimensionDir, "region");
         if (!regionDir.exists()) {
@@ -249,7 +249,7 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
                 // Also add regions for any bedrock wall and/or border
                 // tiles, if present
                 int r = (((dimension.getBorder() != null) && (!dimension.getBorder().isEndless())) ? dimension.getBorderSize() : 0)
-                        + (((dimension.getBorder() == null) || (!dimension.getBorder().isEndless())) && dimension.isBedrockWall() ? 1 : 0);
+                        + (((dimension.getBorder() == null) || (!dimension.getBorder().isEndless())) && (dimension.getWallType() != null) ? 1 : 0);
                 for (int dx = -r; dx <= r; dx++) {
                     for (int dy = -r; dy <= r; dy++) {
                         regions.add(new Point((tile.getX() + dx) >> 2, (tile.getY() + dy) >> 2));
