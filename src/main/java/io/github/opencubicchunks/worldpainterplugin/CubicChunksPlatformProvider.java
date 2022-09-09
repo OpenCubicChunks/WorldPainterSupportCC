@@ -22,6 +22,7 @@ import org.pepsoft.worldpainter.exporting.ExportSettings;
 import org.pepsoft.worldpainter.exporting.ExportSettingsEditor;
 import org.pepsoft.worldpainter.exporting.PostProcessor;
 import org.pepsoft.worldpainter.exporting.WorldExporter;
+import org.pepsoft.worldpainter.exporting.WorldExportSettings;
 import org.pepsoft.worldpainter.importing.JavaMapImporter;
 import org.pepsoft.worldpainter.importing.MapImporter;
 import org.pepsoft.worldpainter.mapexplorer.MapExplorerSupport;
@@ -155,12 +156,12 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     }
 
     @Override
-    public WorldExporter getExporter(World2 world) {
+    public WorldExporter getExporter(World2 world, WorldExportSettings exportSettings) {
         Platform platform = world.getPlatform();
         if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
-        return new CubicChunksWorldExporter(world);
+        return new CubicChunksWorldExporter(world, exportSettings);
     }
 
     @Override

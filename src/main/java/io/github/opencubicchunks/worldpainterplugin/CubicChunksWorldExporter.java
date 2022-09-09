@@ -8,6 +8,7 @@ import org.pepsoft.worldpainter.Dimension;
 import org.pepsoft.worldpainter.Dimension.Anchor;
 import org.pepsoft.worldpainter.exporting.AbstractWorldExporter;
 import org.pepsoft.worldpainter.exporting.JavaWorldExporter;
+import org.pepsoft.worldpainter.exporting.WorldExportSettings;
 import org.pepsoft.worldpainter.history.HistoryEntry;
 import org.pepsoft.worldpainter.util.FileInUseException;
 import org.pepsoft.worldpainter.vo.EventVO;
@@ -26,8 +27,8 @@ import static org.pepsoft.worldpainter.Dimension.Anchor.*;
 import static org.pepsoft.worldpainter.Dimension.Role.DETAIL;
 
 public class CubicChunksWorldExporter extends AbstractWorldExporter {
-    public CubicChunksWorldExporter(World2 world) {
-        super(world, CubicChunksPlatformProvider.CUBICCHUNKS);
+    public CubicChunksWorldExporter(World2 world, WorldExportSettings worldExportSettings) {
+        super(world, worldExportSettings, CubicChunksPlatformProvider.CUBICCHUNKS);
         if ((!world.getPlatform().equals(CubicChunksPlatformProvider.CUBICCHUNKS))) {
             throw new IllegalArgumentException("Unsupported platform " + world.getPlatform());
         }
@@ -36,8 +37,8 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
     @Override
     public Map<Integer, ChunkFactory.Stats> export(File baseDir, String name, File backupDir, ProgressReceiver progressReceiver) throws IOException, ProgressReceiver.OperationCancelled {
         // Sanity checks
-        final Set<Point> selectedTiles = world.getTilesToExport();
-        final Set<Integer> selectedDimensions = world.getDimensionsToExport();
+        final Set<Point> selectedTiles = worldExportSettings.getTilesToExport();
+        final Set<Integer> selectedDimensions = worldExportSettings.getDimensionsToExport();
         if ((selectedTiles == null) && (selectedDimensions != null)) {
             throw new IllegalArgumentException("Exporting a subset of dimensions not supported");
         }
@@ -240,8 +241,8 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
 
         // Calculate total size of dimension
         Set<Point> regions = new HashSet<>(), exportedRegions = new HashSet<>();
-        if (world.getTilesToExport() != null) {
-            for (Point tile : world.getTilesToExport()) {
+        if (worldExportSettings.getTilesToExport() != null) {
+            for (Point tile : worldExportSettings.getTilesToExport()) {
                 regions.add(new Point(tile.x >> 2, tile.y >> 2));
             }
         } else {
