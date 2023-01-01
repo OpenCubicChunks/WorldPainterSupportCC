@@ -45,13 +45,14 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     private static final boolean DEBUG = System.getProperty("cubicchunks.debug", "false").equalsIgnoreCase("true");
     private static final Logger LOGGER = LoggerFactory.getLogger(Chunk16Virtual.class);
 
-    private int columnX;
-    private int columnZ;
+    private final int columnX;
+    private final int columnZ;
     private final CubeMap cubes;
 
-    private int[] yMax = new int[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
+    private final int[] yMax = new int[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
 
     private byte[] biomes = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
+    private boolean storing3dBiomes = false;
 
     private final List<Entity> entities = new ArrayList<>();
     private final List<TileEntity> tileEntities = new ArrayList<>();
@@ -154,7 +155,19 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
         setLong("InhabitedTime", getInhabitedTime());
 
-        if (biomes != null) {
+        if (storing3dBiomes) {
+            byte[] newBiomes = biomes.clone();
+            for (int i = 0; i < this.yMax.length; i++) {
+                int biome = getOrMakeSection(yMax[i] + 1).getBiome(
+                        Coords.blockToBiome3d(Coords.index2dToX(i)),
+                        Coords.blockToLocalBiome3d(yMax[i] + 1),
+                        Coords.blockToBiome3d(Coords.index2dToZ(i)));
+                if (biome != 255) {
+                    newBiomes[i] = (byte) biome;
+                }
+            }
+            setByteArray("Biomes", newBiomes);
+        } else if (biomes != null) {
             setByteArray("Biomes", biomes);
         }
 
@@ -338,17 +351,17 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public boolean isBiomesSupported() {
-        return true;
+        return false; // if we say we support 2d biomes, WP won't attempt to set 3d biomes
     }
 
     @Override
     public boolean isBiomesAvailable() {
-        return biomes != null;
+        return storing3dBiomes || biomes != null;
     }
 
     @Override
     public boolean is3DBiomesSupported() {
-        return false; // NOTE: 3d biomes are non-trivial to support with how CC uses them, as 2d biomes are also required
+        return true;
     }
 
     /**
@@ -359,7 +372,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
      */
     @Override
     public boolean is3DBiomesAvailable() {
-        return false;
+        return storing3dBiomes;
     }
 
     @Override
@@ -376,6 +389,20 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             biomes = new byte[Coords.CUBE_SIZE * Coords.CUBE_SIZE];
         }
         biomes[Coords.index(blockX, blockZ)] = (byte) biome;
+    }
+
+    @Override
+    public int get3DBiome(int xSegment, int ySegment, int zSegment) {
+        if (!storing3dBiomes) {
+            return getBiome(xSegment * 4, zSegment * 4);
+        }
+        return getOrMakeSection(ySegment * 4).getBiome(xSegment, ySegment, zSegment);
+    }
+
+    @Override
+    public void set3DBiome(int xSegment, int ySegment, int zSegment, int biome) {
+        storing3dBiomes = true;
+        getOrMakeSection(ySegment * 4).setBiome(xSegment, ySegment, zSegment, biome);
     }
 
     @Override
@@ -476,6 +503,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         private AbstractNBTItem sectionNbtPlaceholder;
 
         private static final long serialVersionUID = 1L;
+        private byte[] biomes;
 
         {
             id2material.add(Material.AIR);
@@ -770,6 +798,21 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             return yPos;
         }
 
+        public int getBiome(int xSegment, int ySegment, int zSegment) {
+            if (biomes == null) {
+                return parent.getBiome(Coords.biome3dToMinBlock(xSegment), Coords.biome3dToMinBlock(zSegment));
+            }
+            return biomes[Coords.getBiomeAddress3d(xSegment & 3, ySegment & 3, zSegment & 3)] & 0xFF;
+        }
+
+        public void setBiome(int xSegment, int ySegment, int zSegment, int biome) {
+            if (biomes == null) {
+                biomes = new byte[Coords.BIOMES_PER_CUBE];
+                Arrays.fill(biomes, (byte) -1);
+            }
+            biomes[Coords.getBiomeAddress3d(xSegment & 3, ySegment & 3, zSegment & 3)] = (byte) biome;
+        }
+
         private class PlaceholderNBT extends AbstractNBTItem {
             PlaceholderNBT(boolean load) {
                 super(Cube16.this.getSectionTag());
@@ -806,6 +849,30 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
                 skyLight = getByteArray("SkyLight");
                 blockLight = getByteArray("BlockLight");
+                if (containsTag("Biomes3D")) {
+                    biomes = getByteArray("Biomes3D");
+                } else if (containsTag("Biomes")) {
+                    biomes = toNewBiomes(getByteArray("Biomes"));
+                }
+            }
+
+            private byte[] toNewBiomes(byte[] biomes) {
+                byte[] newBiomes = new byte[4 * 4 * 4];
+                for (int x = 0; x < 4; x++) {
+                    for (int y = 0; y < 4; y++) {
+                        for (int z = 0; z < 4; z++) {
+                            // NOTE: spread the biomes from 4 2x2 segments into the 4 vertical 4x4x4 segments
+                            // this ensures that no biome data has been lost, but some of it may get arranged weirdly
+                            newBiomes[Coords.getBiomeAddress3d(x, y, z)] =
+                                    biomes[getOldBiomeAddress(x << 1 | (y & 1), z << 1 | ((y >> 1) & 1))];
+                        }
+                    }
+                }
+                return newBiomes;
+            }
+
+            private int getOldBiomeAddress(int biomeX, int biomeZ) {
+                return biomeX << 3 | biomeZ;
             }
 
             @Override
@@ -844,7 +911,23 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
                 setByteArray("SkyLight", skyLight == null ? PLACEHOLDER_WRITE_SKYLIGHT : skyLight);
                 setByteArray("BlockLight", blockLight == null ? PLACEHOLDER_WRITE : blockLight);
+                if (biomes != null) {
+                    setByteArray("Biomes3D", biomes);
+                    setByteArray("Biomes", toOldBiomeArray(biomes));
+                }
                 return super.toNBT();
+            }
+
+            private byte[] toOldBiomeArray(byte[] biomes) {
+                byte[] old = new byte[8*8];
+                for (int x = 0; x < 4; x++) {
+                    for (int y = 0; y < 4; y++) {
+                        for (int z = 0; z < 4; z++) {
+                            old[getOldBiomeAddress(x << 1 | (y & 1), z << 1 | ((y >> 1) & 1))] = biomes[Coords.getBiomeAddress3d(x, y, z)];
+                        }
+                    }
+                }
+                return old;
             }
         }
     }

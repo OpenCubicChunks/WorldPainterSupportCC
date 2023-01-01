@@ -3,9 +3,17 @@ package io.github.opencubicchunks.worldpainterplugin;
 import static io.github.opencubicchunks.worldpainterplugin.Version.VERSION;
 import static java.util.Collections.singletonList;
 import static org.pepsoft.worldpainter.Constants.*;
+import static org.pepsoft.worldpainter.GameType.ADVENTURE;
 import static org.pepsoft.worldpainter.GameType.CREATIVE;
+import static org.pepsoft.worldpainter.GameType.HARDCORE;
 import static org.pepsoft.worldpainter.GameType.SURVIVAL;
+import static org.pepsoft.worldpainter.Generator.AMPLIFIED;
+import static org.pepsoft.worldpainter.Generator.CUSTOM;
 import static org.pepsoft.worldpainter.Generator.DEFAULT;
+import static org.pepsoft.worldpainter.Generator.END;
+import static org.pepsoft.worldpainter.Generator.FLAT;
+import static org.pepsoft.worldpainter.Generator.LARGE_BIOMES;
+import static org.pepsoft.worldpainter.Generator.NETHER;
 import static org.pepsoft.worldpainter.Platform.Capability.*;
 
 import org.jnbt.ByteTag;
@@ -216,14 +224,14 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     }
 
     static final Platform CUBICCHUNKS = new Platform(
-        "org.pepsoft.cubicchunks",
-        "Cubic Chunks (1.10.2 - 1.12.2)",
-        256,
-        8192,
-        Math.min(Constants.MAX_HEIGHT, Integer.MAX_VALUE / 2),
-        Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE,
-        Arrays.asList(SURVIVAL, CREATIVE),
-        singletonList(DEFAULT),
-        Arrays.asList(DIM_NORMAL, DIM_NETHER, DIM_END),
-        EnumSet.of(BLOCK_BASED, BIOMES, PRECALCULATED_LIGHT, SET_SPAWN_POINT, SEED, POPULATE));
+            "org.pepsoft.cubicchunks",
+            "Cubic Chunks (1.10.2 - 1.12.2)",
+            256,
+            8192,
+            Math.min(Constants.MAX_HEIGHT, Integer.MAX_VALUE / 2),
+            Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE,
+            Arrays.asList(SURVIVAL, CREATIVE, ADVENTURE, HARDCORE),
+            Arrays.asList(DEFAULT, FLAT, LARGE_BIOMES, AMPLIFIED, CUSTOM, NETHER, END),
+            Arrays.asList(DIM_NORMAL, DIM_NETHER, DIM_END),
+            EnumSet.of(BIOMES_3D, PRECALCULATED_LIGHT, SET_SPAWN_POINT, BLOCK_BASED, SEED, POPULATE));
 }
