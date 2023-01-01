@@ -337,8 +337,29 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     }
 
     @Override
+    public boolean isBiomesSupported() {
+        return true;
+    }
+
+    @Override
     public boolean isBiomesAvailable() {
         return biomes != null;
+    }
+
+    @Override
+    public boolean is3DBiomesSupported() {
+        return false; // NOTE: 3d biomes are non-trivial to support with how CC uses them, as 2d biomes are also required
+    }
+
+    /**
+     * Indicates whether 3D biomes are available. See {@link #get3DBiome(int, int, int)} and
+     * {@link #set3DBiome(int, int, int, int)}.
+     *
+     * <p>The default implemenation returns {@code false}.
+     */
+    @Override
+    public boolean is3DBiomesAvailable() {
+        return false;
     }
 
     @Override
