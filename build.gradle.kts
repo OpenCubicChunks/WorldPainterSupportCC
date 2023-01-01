@@ -13,7 +13,7 @@ run.apply {
 //add end here
 
 group = "io.github.opencubicchunks"
-version = "1.3.0"
+version = "1.4.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -36,8 +36,8 @@ configurations.all { resolutionStrategy {
 dependencies {
     implementation(group = "io.github.opencubicchunks", name = "regionlib", version = "0.61.0-SNAPSHOT")
     implementation(group = "com.carrotsearch", name = "hppc", version = "0.8.1")
-    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.8.8") {
+    runtimeOnly(group = "org.pepsoft.worldpainter", name = "WPGUI", version = "2.14.0") {
         exclude(module = "WPDynmapPreviewer")
     }
-    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.8.8")
+    compileOnly(group = "org.pepsoft.worldpainter", name = "WPCore", version = "2.14.0")
 }
