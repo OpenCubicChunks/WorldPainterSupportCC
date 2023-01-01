@@ -219,7 +219,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
         "org.pepsoft.cubicchunks",
         "Cubic Chunks (1.10.2 - 1.12.2)",
         256,
-        Math.min(Constants.MAX_HEIGHT, Integer.MAX_VALUE / 2),
+        8192,
         Math.min(Constants.MAX_HEIGHT, Integer.MAX_VALUE / 2),
         Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE,
         Arrays.asList(SURVIVAL, CREATIVE),
