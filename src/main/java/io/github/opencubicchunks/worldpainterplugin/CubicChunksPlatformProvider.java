@@ -144,11 +144,11 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
     }
 
     @Override
-    public Chunk createChunk(Platform platform, int x, int z, int maxHeight) {
+    public Chunk createChunk(Platform platform, int x, int z, int minHeight, int maxHeight) {
         if (!platform.equals(CUBICCHUNKS)) {
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
-        return new Chunk16Virtual(x, z, maxHeight, EditMode.EDITABLE);
+        return new Chunk16Virtual(x, z, minHeight, maxHeight, EditMode.EDITABLE);
     }
 
     @Override
@@ -157,7 +157,7 @@ public class CubicChunksPlatformProvider extends AbstractPlugin implements Block
             throw new IllegalArgumentException("Platform " + platform + " not supported");
         }
         try {
-            return new CubicChunkStore(worldDir, dimension, Integer.MAX_VALUE / 2);
+            return new CubicChunkStore(worldDir, dimension, Integer.MIN_VALUE / 2, Integer.MAX_VALUE / 2);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

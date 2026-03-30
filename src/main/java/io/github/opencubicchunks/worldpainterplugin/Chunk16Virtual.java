@@ -56,27 +56,29 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     private final List<Entity> entities = new ArrayList<>();
     private final List<TileEntity> tileEntities = new ArrayList<>();
-    private final int maxHeight;
+    private final int minHeight, maxHeight;
 
     private final boolean readOnly;
     private boolean forcePopulated;
     private boolean forceLightPopulated;
     private long inhabitedTime;
 
-    public Chunk16Virtual(int columnX, int columnZ, int maxHeight, EditMode editMode) {
+    public Chunk16Virtual(int columnX, int columnZ, int minHeight, int maxHeight, EditMode editMode) {
         super(new CompoundTag(TAG_LEVEL, new HashMap<>()));
         this.columnX = columnX;
         this.columnZ = columnZ;
         this.cubes = new CubeMap();
+        this.minHeight = minHeight;
         this.maxHeight = maxHeight;
         this.readOnly = editMode == EditMode.READONLY;
     }
 
-    public Chunk16Virtual(SerializedColumn serialized, int columnX, int columnZ, int maxHeight, EditMode editMode) {
+    public Chunk16Virtual(SerializedColumn serialized, int columnX, int columnZ, int minHeight, int maxHeight, EditMode editMode) {
         super(serialized.getColumnLevel());
         this.columnX = columnX;
         this.columnZ = columnZ;
         this.cubes = new CubeMap();
+        this.minHeight = minHeight;
         this.maxHeight = maxHeight;
         this.readOnly = editMode == EditMode.READONLY;
 
@@ -342,6 +344,11 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     @Override
     public List<TileEntity> getTileEntities() {
         return tileEntities;
+    }
+
+    @Override
+    public int getMinHeight() {
+        return this.minHeight;
     }
 
     @Override

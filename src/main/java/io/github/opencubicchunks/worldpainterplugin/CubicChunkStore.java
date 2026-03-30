@@ -47,9 +47,11 @@ public class CubicChunkStore implements ChunkStore {
     private final Path path;
     private SaveSection2D section2d;
     private SaveSection3D section3d;
-    private final int maxHeight;
+    private final int minHeight, maxHeight;
     private ChunkListHolder chunks;
-    public CubicChunkStore(File worldDir, int dimension, int maxHeight) throws IOException {
+
+    public CubicChunkStore(File worldDir, int dimension, int minHeight, int maxHeight) throws IOException {
+        this.minHeight = minHeight;
         this.maxHeight = maxHeight;
         Path path = worldDir.toPath();
         if (dimension != 0) {
@@ -58,6 +60,7 @@ public class CubicChunkStore implements ChunkStore {
         this.path = path;
         init();
     }
+
     private void init() throws IOException {
         Files.createDirectories(path);
         Path part2d = path.resolve("region2d");
@@ -221,7 +224,7 @@ public class CubicChunkStore implements ChunkStore {
                 .orElseGet(() -> makeFakeColumnNBT(cubeTags.values().iterator().next()));
 
 
-        return new Chunk16Virtual(new Chunk16Virtual.SerializedColumn(columnTag, cubeTags), x, z, maxHeight, editMode);
+        return new Chunk16Virtual(new Chunk16Virtual.SerializedColumn(columnTag, cubeTags), x, z, minHeight, maxHeight, editMode);
     }
 
     private <T extends IKey<T>> Optional<ByteBuffer> load(SaveSection<?, T> save, T loc) {
