@@ -1,11 +1,16 @@
 package io.github.opencubicchunks.worldpainterplugin;
 
 import cubicchunks.regionlib.api.region.key.IKey;
+import cubicchunks.regionlib.api.region.key.IKeyProvider;
+import cubicchunks.regionlib.api.region.key.RegionKey;
 import cubicchunks.regionlib.api.storage.SaveSection;
 import cubicchunks.regionlib.impl.EntryLocation2D;
 import cubicchunks.regionlib.impl.EntryLocation3D;
 import cubicchunks.regionlib.impl.save.SaveSection2D;
 import cubicchunks.regionlib.impl.save.SaveSection3D;
+import cubicchunks.regionlib.lib.ExtRegion;
+import cubicchunks.regionlib.lib.factory.SimpleRegionFactory;
+import cubicchunks.regionlib.lib.provider.SharedCachedRegionProvider;
 import org.jnbt.ByteTag;
 import org.jnbt.CompoundTag;
 import org.jnbt.NBTInputStream;
@@ -26,13 +31,8 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.*;
 import java.util.AbstractMap.SimpleEntry;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
@@ -68,7 +68,16 @@ public class CubicChunkStore implements ChunkStore {
         Path part3d = path.resolve("region3d");
         Files.createDirectories(part3d);
         section2d = SaveSection2D.createAt(part2d);
-        section3d = SaveSection3D.createAt(part3d);
+        section3d = new SaveSection3D(
+                new SharedCachedRegionProvider<>(
+                        SimpleRegionFactory.createDefault(new CubePosProvider(), part3d, 512)
+                ),
+                new SharedCachedRegionProvider<>(
+                        new SimpleRegionFactory<>(new CubePosProvider(), part3d,
+                                (keyProvider, regionKey) -> new ExtRegion<>(part3d, Collections.emptyList(), keyProvider, regionKey),
+                                (keyProvider, regionKey) -> Files.exists(part3d.resolve(regionKey.getName() + ".ext"))
+                        )
+                ));
         ChunkListHolder lastChunkList = LAST_CHUNK_LIST;
         if (lastChunkList != null && lastChunkList.path.equals(path)) {
             LOGGER.info("Using cached chunk map for path " + path);
@@ -110,19 +119,23 @@ public class CubicChunkStore implements ChunkStore {
         return chunks.chunkOrder;
     }
 
-    @Override public int getChunkCount() {
+    @Override
+    public int getChunkCount() {
         return getChunkCoords().size();
     }
 
-    @Override public Set<MinecraftCoords> getChunkCoords() {
+    @Override
+    public Set<MinecraftCoords> getChunkCoords() {
         return getChunks().keySet();
     }
 
-    @Override public boolean visitChunks(ChunkVisitor chunkVisitor) {
+    @Override
+    public boolean visitChunks(ChunkVisitor chunkVisitor) {
         return visitChunks(chunkVisitor, EditMode.READONLY);
     }
 
-    @Override public boolean visitChunksForEditing(ChunkVisitor chunkVisitor) {
+    @Override
+    public boolean visitChunksForEditing(ChunkVisitor chunkVisitor) {
         return visitChunks(chunkVisitor, EditMode.EDITABLE);
     }
 
@@ -284,6 +297,113 @@ public class CubicChunkStore implements ChunkStore {
             this.map = chunks;
             this.chunkOrder = chunkOrder;
             this.path = path;
+        }
+    }
+
+
+    public static class CubePosProvider implements IKeyProvider<EntryLocation3D> {
+        private static final int LOC_BITS = 4;
+        private static final int LOC_BITMASK = (1 << LOC_BITS) - 1;
+        public static final int ENTRIES_PER_REGION = (1 << LOC_BITS) * (1 << LOC_BITS) * (1 << LOC_BITS);
+
+        @Override
+        public EntryLocation3D fromRegionAndId(RegionKey regionKey, int id) throws IllegalArgumentException {
+
+            int[] pos = new int[3];
+            String s = regionKey.getName();
+
+            int len = s.length();
+
+            int i = 0;
+            for (int part = 0; part < 3; part++) {
+                if (i >= len) {
+                    throw new IllegalArgumentException("Invalid name " + regionKey.getName());
+                }
+
+                int numberStartIdx = i;
+
+                // optional '-'
+                if (s.charAt(i) == '-') {
+                    i++;
+                }
+
+                // at least one digit
+                int start = i;
+                while (i < len && Character.isDigit(s.charAt(i))) {
+                    i++;
+                }
+                if (i == start) {
+                    throw new IllegalArgumentException("Invalid name " + regionKey.getName());
+                }
+
+                int numberEndIdx = i;
+                pos[part] = Integer.parseInt(s, numberStartIdx, numberEndIdx, 10);
+
+                // dot separator (except last number)
+                if (part < 2) {
+                    if (i >= len || s.charAt(i) != '.') {
+                        throw new IllegalArgumentException("Invalid name " + regionKey.getName());
+                    }
+                    i++;
+                }
+            }
+
+            // after third number we should be at ".3dr"
+            if (!s.startsWith(".3dr", i)) {
+                throw new IllegalArgumentException("Invalid name " + regionKey.getName());
+            }
+
+            int relativeX = id >>> LOC_BITS * 2;
+            int relativeY = (id >>> LOC_BITS) & LOC_BITMASK;
+            int relativeZ = id & LOC_BITMASK;
+            return new EntryLocation3D(
+                    pos[0] << LOC_BITS | relativeX,
+                    pos[1] << LOC_BITS | relativeY,
+                    pos[2] << LOC_BITS | relativeZ);
+        }
+
+        @Override
+        public int getKeyCount(RegionKey key) {
+            return ENTRIES_PER_REGION;
+        }
+
+        @Override
+        public boolean isValid(RegionKey key) {
+            String s = key.getName();
+
+            int len = s.length();
+
+            int i = 0;
+            for (int part = 0; part < 3; part++) {
+                if (i >= len) {
+                    return false;
+                }
+
+                // optional '-'
+                if (s.charAt(i) == '-') {
+                    i++;
+                }
+
+                // at least one digit
+                int start = i;
+                while (i < len && Character.isDigit(s.charAt(i))) {
+                    i++;
+                }
+                if (i == start) {
+                    return false;
+                }
+
+                // dot separator (except last number)
+                if (part < 2) {
+                    if (i >= len || s.charAt(i) != '.') {
+                        return false;
+                    }
+                    i++;
+                }
+            }
+
+            // after third number we should be at ".3dr"
+            return s.startsWith(".3dr", i);
         }
     }
 }

@@ -275,6 +275,6 @@ public class CubicChunksWorldExporter extends AbstractWorldExporter {
         return collectedStats;
     }
 
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JavaWorldExporter.class);
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(CubicChunksWorldExporter.class);
     private static final String DEFAULT_GENERATOR_OPTIONS = "village,mineshaft(chance=0.01),stronghold(distance=32 count=3 spread=3),biome_1(distance=32),dungeon,decoration,lake,lava_lake,oceanmonument(spacing=32 separation=5)";
 }
