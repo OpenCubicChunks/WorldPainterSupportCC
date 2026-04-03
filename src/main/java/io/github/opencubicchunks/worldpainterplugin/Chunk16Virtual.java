@@ -42,6 +42,9 @@ import java.util.stream.Collectors;
 
 public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
+    private enum ColumnPopulationState {
+        NO, YES, UNSET
+    }
     private static final boolean DEBUG = System.getProperty("cubicchunks.debug", "false").equalsIgnoreCase("true");
     private static final Logger LOGGER = LoggerFactory.getLogger(Chunk16Virtual.class);
 
@@ -59,7 +62,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
     private final int minHeight, maxHeight;
 
     private final boolean readOnly;
-    private boolean forcePopulated;
+    private ColumnPopulationState populationState = ColumnPopulationState.UNSET;
     private boolean forceLightPopulated;
     private long inhabitedTime;
 
@@ -309,7 +312,19 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public boolean isTerrainPopulated() {
-        throw new UnsupportedOperationException("This was never used at the time I was writing this and this can't be implemented in cubic chunks");
+        if (populationState == ColumnPopulationState.UNSET) {
+            // HEURISTICS!
+            // use population state of the top non-empty cube
+            for (int i = cubes.array().length - 1; i >= 0; i--) {
+                Cube16 cube = cubes.array()[i];
+                if (cube != null && !cube.isEmpty()) {
+                    return cube.cubePopulated;
+                }
+            }
+            return false; // only empty cubes exist
+        } else {
+            return populationState == ColumnPopulationState.YES;
+        }
     }
 
     @Override
@@ -317,7 +332,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         if (readOnly) {
             return;
         }
-        this.forcePopulated = terrainPopulated;
+        this.populationState = terrainPopulated ? ColumnPopulationState.YES : ColumnPopulationState.NO;
     }
 
     @Override
@@ -504,6 +519,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         private final ObjectIntIdentityHashMap<Material> material2id = new ObjectIntIdentityHashMap<>();
         private byte[] skyLight;
         private byte[] blockLight;
+        private final boolean cubePopulated;
 
         // a hack because of this NBT library works
         // it doesn't agree with nesting that doesn't directly correspond to in-memory nesting
@@ -533,6 +549,8 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
             List<CompoundTag> tileEntityTags = getListSafe("TileEntities");
             parent.tileEntities.addAll(tileEntityTags.stream().map(TileEntity::fromNBT).collect(toCollection(ArrayList::new)));
+
+            this.cubePopulated = getBoolean("populated");
         }
 
         @SuppressWarnings("unchecked")
@@ -575,6 +593,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             this.parent = parent;
             yPos = cubeY;
             sectionNbtPlaceholder = new PlaceholderNBT(false);
+            this.cubePopulated = parent.populationState == ColumnPopulationState.YES;
         }
 
         @Override
@@ -587,7 +606,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
             setInt("z", parent.getzPos());
 
             // save the worldgen stage and the target stage
-            setBoolean("populated", parent.forcePopulated);
+            setBoolean("populated", parent.populationState == ColumnPopulationState.UNSET ? cubePopulated : parent.populationState == ColumnPopulationState.YES);
             setBoolean("isSurfaceTracked", false);
             // we can't know that one, but in the worst case, setting it incorrectly will cause cube to be sent to client before it's fully populated
             setBoolean("fullyPopulated", true);
@@ -621,8 +640,8 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
         }
 
         boolean isEmpty() {
-            // data must be empty is blocks and add are null
-            return blocks == null;
+            // data must be empty if blocks and add are null
+            return blocks == null || Arrays.stream(blocks).allMatch(x -> x == 0);
         }
 
         int getBlockLight(int x, int y, int z) {
@@ -652,7 +671,13 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
                 id2material.add(mat);
                 material2id.put(mat, newId);
                 if (newId >= (1 << bits)) {
-                    resize(Integer.SIZE - Integer.numberOfLeadingZeros(newId));
+                    int newBits;
+                    if (bits < 4) {
+                        newBits = 4;
+                    } else {
+                        newBits = Integer.SIZE - Integer.numberOfLeadingZeros(newId);
+                    }
+                    resize(newBits);
                 }
                 id = newId;
             }
