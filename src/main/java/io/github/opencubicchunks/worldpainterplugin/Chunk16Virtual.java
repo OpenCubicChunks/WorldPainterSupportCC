@@ -373,7 +373,7 @@ public class Chunk16Virtual extends AbstractNBTItem implements Chunk {
 
     @Override
     public boolean isBiomesSupported() {
-        return false; // if we say we support 2d biomes, WP won't attempt to set 3d biomes
+        return true; // TODO: we can't support 3d biomes because WP will set them for the whole world height range
     }
 
     @Override
