@@ -91,12 +91,12 @@ public class CubicChunkStore implements ChunkStore {
     private void chunksLazyInit() {
         if (chunks == null) {
             try {
-                Map<MinecraftCoords, ArrayList<Integer>> map = new ConcurrentHashMap<>(8192);
+                Map<MinecraftCoords, HashSet<Integer>> map = new ConcurrentHashMap<>(8192);
                 List<MinecraftCoords> chunkOrder = new ArrayList<>();
                 section3d.forAllKeys(p -> {
                     MinecraftCoords coords = new MinecraftCoords(p.getEntryX(), p.getEntryZ());
                     boolean alreadyExists = map.containsKey(coords);
-                    map.computeIfAbsent(coords, k -> new ArrayList<>()).add(p.getEntryY());
+                    map.computeIfAbsent(coords, k -> new HashSet<>()).add(p.getEntryY());
                     if (!alreadyExists) {
                         chunkOrder.add(coords);
                     }
@@ -109,7 +109,7 @@ public class CubicChunkStore implements ChunkStore {
         }
     }
 
-    private synchronized Map<MinecraftCoords, ArrayList<Integer>> getChunks() {
+    private synchronized Map<MinecraftCoords, HashSet<Integer>> getChunks() {
         chunksLazyInit();
         return chunks.map;
     }
@@ -176,7 +176,7 @@ public class CubicChunkStore implements ChunkStore {
             }
             // TODO: is this thread safe?
             synchronized (this) {
-                getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new ArrayList<>()).add(y);
+                getChunks().computeIfAbsent(new MinecraftCoords(x, z), p -> new HashSet<>()).add(y);
             }
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -288,12 +288,12 @@ public class CubicChunkStore implements ChunkStore {
     }
 
     private static class ChunkListHolder {
-        Map<MinecraftCoords, ArrayList<Integer>> map;
+        Map<MinecraftCoords, HashSet<Integer>> map;
         List<MinecraftCoords> chunkOrder;
 
         Path path;
 
-        public ChunkListHolder(Map<MinecraftCoords, ArrayList<Integer>> chunks, List<MinecraftCoords> chunkOrder, Path path) {
+        public ChunkListHolder(Map<MinecraftCoords, HashSet<Integer>> chunks, List<MinecraftCoords> chunkOrder, Path path) {
             this.map = chunks;
             this.chunkOrder = chunkOrder;
             this.path = path;
